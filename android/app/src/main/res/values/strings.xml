@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">allot</string>
+    <string name="accessibility_service_description">Allot uses accessibility service to monitor screen activity and provide overlay controls. No personal data is collected or transmitted.</string>
 </resources>

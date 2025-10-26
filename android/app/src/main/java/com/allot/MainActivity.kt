@@ -1,5 +1,6 @@
 package com.allot
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -11,12 +12,34 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+  private var screenPermissionModule: ScreenPermissionModule? = null
+
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    // Get reference to our native module for activity result handling
+    try {
+      val reactInstanceManager = reactNativeHost.reactInstanceManager
+      val reactContext = reactInstanceManager.currentReactContext
+      reactContext?.let { context ->
+        screenPermissionModule = context.getNativeModule(ScreenPermissionModule::class.java)
+      }
+    } catch (e: Exception) {
+      // Module not ready yet, will be available later
+    }
+  }
+
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    // Forward activity results to our native module
+    screenPermissionModule?.onActivityResult(requestCode, resultCode, data)
   }
 
   /**
