@@ -40,6 +40,7 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="permissions" options={{ title: 'Permissions' }} />
+        <Stack.Screen name="screen-capture" options={{ title: 'Screen Capture' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />

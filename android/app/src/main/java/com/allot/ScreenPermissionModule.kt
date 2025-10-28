@@ -10,14 +10,22 @@ import android.provider.Settings
 import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.bridge.ActivityEventListener
 
-class ScreenPermissionModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+class ScreenPermissionModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext), ActivityEventListener {
 
     companion object {
         const val SCREEN_CAPTURE_REQUEST_CODE = 1001
         const val ACCESSIBILITY_REQUEST_CODE = 1002
         const val OVERLAY_REQUEST_CODE = 1003
         const val TAG = "AllotPermissions"
+    }
+
+    private var screenCapturePromise: Promise? = null
+
+    init {
+        // Register to receive activity results
+        reactContext.addActivityEventListener(this)
     }
 
     override fun getName(): String {
@@ -45,27 +53,30 @@ class ScreenPermissionModule(reactContext: ReactApplicationContext) : ReactConte
         try {
             Log.d(TAG, "Requesting screen capture permission...")
             
+            // Guard against concurrent requests
             val activity = reactApplicationContext.currentActivity
             if (activity == null) {
-                Log.e(TAG, "No current activity available")
                 promise.reject("NO_ACTIVITY", "Activity not available")
                 return
             }
+            if (screenCapturePromise != null) {
+                promise.reject("ALREADY_REQUESTING", "Permission request already in progress")
+                return
+            }
+            screenCapturePromise = promise
 
             val mediaProjectionManager = reactApplicationContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
             if (mediaProjectionManager == null) {
-                Log.e(TAG, "MediaProjectionManager not available")
+                screenCapturePromise = null
                 promise.reject("SERVICE_UNAVAILABLE", "MediaProjection service not available")
                 return
             }
-
-            val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
             
-            // Store promise for later resolution
-            screenCapturePromise = promise
+            val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
             Log.d(TAG, "Starting screen capture permission activity...")
             activity.startActivityForResult(captureIntent, SCREEN_CAPTURE_REQUEST_CODE)
         } catch (e: Exception) {
+            screenCapturePromise = null
             Log.e(TAG, "Error requesting screen capture permission: ${e.message}", e)
             promise.reject("PERMISSION_REQUEST_ERROR", e.message)
         }
@@ -220,22 +231,45 @@ class ScreenPermissionModule(reactContext: ReactApplicationContext) : ReactConte
         }
     }
 
-    // Store promises for activity result handling
-    private var screenCapturePromise: Promise? = null
+    // Store promises for activity result handling  
     private var accessibilityPromise: Promise? = null
     private var overlayPromise: Promise? = null
 
-    // Handle activity results (this would be called from MainActivity)
-    fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.d(TAG, "onActivityResult: requestCode=$requestCode, resultCode=$resultCode")
+    // ActivityEventListener implementation
+    override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+        Log.d(TAG, "onActivityResult: requestCode=$requestCode, resultCode=$resultCode, data=${data != null}")
         
         when (requestCode) {
             SCREEN_CAPTURE_REQUEST_CODE -> {
                 screenCapturePromise?.let { promise ->
-                    val granted = resultCode == Activity.RESULT_OK
-                    Log.d(TAG, "Screen capture permission result: $granted")
-                    promise.resolve(granted)
+                    val granted = resultCode == Activity.RESULT_OK && data != null
+                    if (granted) {
+                        // Store real intent & code in the shared holder (do not serialize)
+                        ProjectionPermissionHolder.pendingResultCode = resultCode
+                        ProjectionPermissionHolder.pendingDataIntent = Intent(data) // copy for safety
+
+                        Log.d(TAG, "✅ Screen capture permission GRANTED - stored in holder")
+                        promise.resolve(Arguments.createMap().apply {
+                            putBoolean("granted", true)
+                            putInt("resultCode", resultCode)
+                        })
+                    } else {
+                        // Clear any existing
+                        ProjectionPermissionHolder.clear()
+                        Log.d(TAG, "❌ Screen capture permission DENIED")
+                        promise.resolve(Arguments.createMap().apply {
+                            putBoolean("granted", false)
+                        })
+                    }
                     screenCapturePromise = null
+                } ?: run {
+                    Log.w(TAG, "No stored promise for screen capture result")
+                    // Still store intent for possible manual start
+                    if (resultCode == Activity.RESULT_OK && data != null) {
+                        ProjectionPermissionHolder.pendingResultCode = resultCode
+                        ProjectionPermissionHolder.pendingDataIntent = Intent(data)
+                        Log.d(TAG, "Stored screen capture permission without promise")
+                    }
                 }
             }
             ACCESSIBILITY_REQUEST_CODE -> {
@@ -271,5 +305,9 @@ class ScreenPermissionModule(reactContext: ReactApplicationContext) : ReactConte
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        // Required by ActivityEventListener interface
     }
 }

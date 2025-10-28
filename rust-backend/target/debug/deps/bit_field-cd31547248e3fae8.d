@@ -1,0 +1,5 @@
+/home/alex/Projects/allot2/rust-backend/target/debug/deps/bit_field-cd31547248e3fae8.d: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bit_field-0.10.3/src/lib.rs
+
+/home/alex/Projects/allot2/rust-backend/target/debug/deps/libbit_field-cd31547248e3fae8.rmeta: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bit_field-0.10.3/src/lib.rs
+
+/home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bit_field-0.10.3/src/lib.rs:

@@ -16,9 +16,11 @@ import expo.modules.ReactActivityDelegateWrapper
 class MainActivity : ReactActivity() {
   private var screenPermissionModule: ScreenPermissionModule? = null
   private var notificationModule: NotificationModule? = null
+  private var screenCaptureModule: ScreenCaptureModule? = null
 
   companion object {
     const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
+    const val SCREEN_CAPTURE_REQUEST_CODE = 1000
     const val TAG = "MainActivity"
   }
 
@@ -39,6 +41,7 @@ class MainActivity : ReactActivity() {
       reactContext?.let { context ->
         screenPermissionModule = context.getNativeModule(ScreenPermissionModule::class.java)
         notificationModule = context.getNativeModule(NotificationModule::class.java)
+        screenCaptureModule = context.getNativeModule(ScreenCaptureModule::class.java)
       }
     } catch (e: Exception) {
       // Module not ready yet, will be available later
@@ -47,8 +50,8 @@ class MainActivity : ReactActivity() {
 
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
     super.onActivityResult(requestCode, resultCode, data)
-    // Forward activity results to our native module
-    screenPermissionModule?.onActivityResult(requestCode, resultCode, data)
+    // Activity results are now handled automatically by ActivityEventListener modules
+    // ScreenPermissionModule implements ActivityEventListener and receives results automatically
   }
 
   override fun onRequestPermissionsResult(

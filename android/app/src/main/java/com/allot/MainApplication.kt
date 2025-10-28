@@ -27,6 +27,7 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               // Add our custom native modules
               add(ScreenPermissionPackage())
+              add(ScreenCapturePackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
