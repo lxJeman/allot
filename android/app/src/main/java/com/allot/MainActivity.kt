@@ -1,8 +1,10 @@
 package com.allot
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -13,6 +15,12 @@ import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
   private var screenPermissionModule: ScreenPermissionModule? = null
+  private var notificationModule: NotificationModule? = null
+
+  companion object {
+    const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
+    const val TAG = "MainActivity"
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
@@ -24,12 +32,13 @@ class MainActivity : ReactActivity() {
 
   override fun onResume() {
     super.onResume()
-    // Get reference to our native module for activity result handling
+    // Get reference to our native modules for activity result handling
     try {
       val reactInstanceManager = reactNativeHost.reactInstanceManager
       val reactContext = reactInstanceManager.currentReactContext
       reactContext?.let { context ->
         screenPermissionModule = context.getNativeModule(ScreenPermissionModule::class.java)
+        notificationModule = context.getNativeModule(NotificationModule::class.java)
       }
     } catch (e: Exception) {
       // Module not ready yet, will be available later
@@ -40,6 +49,25 @@ class MainActivity : ReactActivity() {
     super.onActivityResult(requestCode, resultCode, data)
     // Forward activity results to our native module
     screenPermissionModule?.onActivityResult(requestCode, resultCode, data)
+  }
+
+  override fun onRequestPermissionsResult(
+    requestCode: Int,
+    permissions: Array<out String>,
+    grantResults: IntArray
+  ) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    
+    when (requestCode) {
+      NOTIFICATION_PERMISSION_REQUEST_CODE -> {
+        if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+          Log.d(TAG, "POST_NOTIFICATIONS permission granted by user")
+        } else {
+          Log.d(TAG, "POST_NOTIFICATIONS permission denied by user")
+        }
+        // The React Native side will check the permission status after the request
+      }
+    }
   }
 
   /**

@@ -136,6 +136,7 @@ export default function PermissionsScreen() {
     setLoading(true);
     try {
       console.log('🔔 Requesting notification permission...');
+      
       // First check if notifications are already enabled
       const isEnabled = await NotificationModule.checkNotificationPermission();
       console.log('🔔 Current notification status:', isEnabled);
@@ -145,26 +146,54 @@ export default function PermissionsScreen() {
         Alert.alert('Already Enabled', 'Notifications are already enabled for this app');
         setPermissions(prev => ({ ...prev, notifications: true }));
       } else {
-        console.log('❌ Notifications disabled - directing to settings');
+        console.log('❌ Notifications disabled - requesting permission');
+        
+        // Show explanation first, then request permission
         Alert.alert(
           'Enable Notifications',
-          'Please enable notifications for Allot in your device settings. This will allow the app to show monitoring status.',
+          'Allot needs notification permission to show monitoring status and alerts. This will either show a permission dialog or open settings.',
           [
             { text: 'Cancel', style: 'cancel' },
             {
-              text: 'Open Settings',
+              text: 'Grant Permission',
               onPress: async () => {
                 try {
                   console.log('🔔 Requesting notification permission...');
                   await NotificationModule.requestNotificationPermission();
                   console.log('🔔 Permission request completed');
-                  // Check permissions again when user returns
-                  setTimeout(() => {
-                    checkAllPermissions();
-                  }, 2000);
+                  
+                  // Check permissions again after user returns from settings or grants permission
+                  setTimeout(async () => {
+                    console.log('🔔 Checking notification status after permission request...');
+                    await checkAllPermissions();
+                    
+                    // Check if permission was granted
+                    const newStatus = await NotificationModule.checkNotificationPermission();
+                    if (newStatus) {
+                      Alert.alert('Success!', 'Notification permission granted. You can now receive monitoring alerts.');
+                    } else {
+                      Alert.alert(
+                        'Permission Required', 
+                        'Notifications are still disabled. Please enable them in your device settings to receive monitoring alerts.',
+                        [
+                          { text: 'OK', style: 'default' },
+                          {
+                            text: 'Open Settings',
+                            onPress: async () => {
+                              try {
+                                await NotificationModule.openNotificationSettings();
+                              } catch (error) {
+                                console.error('Error opening notification settings:', error);
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }
+                  }, 1500);
                 } catch (error) {
                   console.error('❌ Error requesting notification permission:', error);
-                  Alert.alert('Error', 'Failed to request notification permission');
+                  Alert.alert('Error', 'Failed to request notification permission. Please enable notifications manually in your device settings.');
                 }
               }
             }
@@ -475,6 +504,20 @@ export default function PermissionsScreen() {
           onPress={hidePersistentNotification}
         >
           <Text style={styles.buttonText}>Remove Persistent Notification</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#FF9800' }]}
+          onPress={async () => {
+            try {
+              await NotificationModule.openNotificationSettings();
+            } catch (error) {
+              console.error('Error opening notification settings:', error);
+              Alert.alert('Error', 'Failed to open notification settings');
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>⚙️ Open Notification Settings</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

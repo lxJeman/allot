@@ -306,11 +306,36 @@ class NotificationModule(reactContext: ReactApplicationContext) :
                 val activity = reactApplicationContext.currentActivity
                 if (activity != null) {
                     Log.d(TAG, "Requesting POST_NOTIFICATIONS permission for Android 13+")
-                    // We need to use the activity to request permission
-                    // For now, direct to settings since we can't easily request runtime permission from module
-                    openNotificationSettings(promise)
+                    
+                    // Check if permission is already granted
+                    val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                        reactApplicationContext,
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    
+                    if (hasPermission) {
+                        Log.d(TAG, "POST_NOTIFICATIONS permission already granted")
+                        promise.resolve(true)
+                        return
+                    }
+                    
+                    // Request the permission using ActivityCompat
+                    if (activity is androidx.core.app.ActivityCompat.OnRequestPermissionsResultCallback) {
+                        Log.d(TAG, "Requesting POST_NOTIFICATIONS permission via system dialog")
+                        androidx.core.app.ActivityCompat.requestPermissions(
+                            activity,
+                            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                            1001 // This matches NOTIFICATION_PERMISSION_REQUEST_CODE in MainActivity
+                        )
+                        // Note: The result will be handled by the activity's onRequestPermissionsResult
+                        // For now, we'll resolve immediately and let the UI check status later
+                        promise.resolve(true)
+                    } else {
+                        Log.w(TAG, "Activity doesn't implement OnRequestPermissionsResultCallback, opening settings")
+                        openNotificationSettings(promise)
+                    }
                 } else {
-                    Log.w(TAG, "No current activity available for permission request")
+                    Log.w(TAG, "No current activity available for permission request, opening settings")
                     openNotificationSettings(promise)
                 }
             } else {
