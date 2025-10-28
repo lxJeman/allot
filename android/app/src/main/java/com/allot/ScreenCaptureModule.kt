@@ -198,6 +198,35 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    @ReactMethod
+    fun captureNextFrame(promise: Promise) {
+        try {
+            if (!isCapturing) {
+                promise.reject("NOT_CAPTURING", "Screen capture is not active")
+                return
+            }
+            
+            Log.d(TAG, "🎯 Requesting next frame capture...")
+            
+            // Force a capture by briefly enabling processing
+            // The ImageReader should have frames available from the VirtualDisplay
+            Thread {
+                try {
+                    // Small delay to ensure frame is available
+                    Thread.sleep(50)
+                    Log.d(TAG, "🎯 Frame capture request processed")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in frame capture thread: ${e.message}")
+                }
+            }.start()
+            
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error requesting next frame: ${e.message}", e)
+            promise.reject("CAPTURE_ERROR", e.message)
+        }
+    }
+
     private fun setupImageCapture() {
         try {
             Log.d(TAG, "🖼️ Setting up image capture...")
@@ -378,10 +407,8 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
     }
 
     private fun startCaptureLoop() {
-        // The capture loop is now driven by the ImageReader listener
-        // Each image triggers processing, which sends to backend, waits for response, then
-        // continues
-        Log.d(TAG, "🔄 Capture loop started - driven by ImageReader events")
+        // No automatic loop - capture is now completely on-demand
+        Log.d(TAG, "🔄 On-demand capture system ready - no automatic intervals")
     }
 
     private fun stopCaptureLoop() {

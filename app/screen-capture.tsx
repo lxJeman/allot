@@ -46,14 +46,17 @@ export default function ScreenCaptureScreen() {
   const [resultCode, setResultCode] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [captureLoop, setCaptureLoop] = useState(false);
 
   useEffect(() => {
     // Check if already capturing
     checkCaptureStatus();
 
-    // Listen for screen capture events with async processing
+    // Listen for screen capture events - now part of sequential loop
     const captureListener = DeviceEventEmitter.addListener('onScreenCaptured', async (data: CaptureData) => {
-      console.log('📸 Screen captured:', data.width + 'x' + data.height);
+      const timestamp = new Date().toISOString();
+      console.log(`📸 [${timestamp}] Screen captured:`, data.width + 'x' + data.height);
+      
       setLastCapture(data);
       setStats(prev => ({
         ...prev,
@@ -61,9 +64,10 @@ export default function ScreenCaptureScreen() {
         lastCaptureTime: data.timestamp,
       }));
 
-      // Process this capture asynchronously
-      if (!isProcessing) {
-        processCapture(data);
+      // ALWAYS process captures automatically when loop is active
+      if (captureLoop) {
+        console.log(`🔄 [${timestamp}] Starting automatic processing...`);
+        processCapture(data); // Don't await here to prevent blocking
       }
     });
 
@@ -123,11 +127,22 @@ export default function ScreenCaptureScreen() {
 
     setLoading(true);
     try {
-      console.log('🎬 Starting screen capture...');
-      // The native module now handles the permission data internally
+      console.log('🎬 Starting sequential screen capture...');
+      // Start the native capture system
       await ScreenCaptureModule.startScreenCapture();
       setStats(prev => ({ ...prev, isCapturing: true }));
-      Alert.alert('Success', 'Screen capture started! Check the notification bar.');
+      
+      // Start the response-driven loop
+      setCaptureLoop(true);
+      
+      // Trigger the first capture to start the loop
+      console.log('🔄 Starting sequential loop...');
+      setTimeout(() => {
+        console.log('🎯 Triggering first capture...');
+        triggerNextCapture();
+      }, 1000); // Give native system time to initialize
+      
+      Alert.alert('Success', 'Sequential screen capture started! Each screenshot waits for analysis.');
     } catch (error) {
       console.error('❌ Error starting capture:', error);
       Alert.alert('Error', `Failed to start screen capture: ${error}`);
@@ -139,10 +154,17 @@ export default function ScreenCaptureScreen() {
   const stopCapture = async () => {
     setLoading(true);
     try {
-      console.log('🛑 Stopping screen capture...');
+      console.log('🛑 Stopping sequential screen capture...');
+      
+      // Stop the response-driven loop
+      setCaptureLoop(false);
+      
+      // Stop the native capture system
       await ScreenCaptureModule.stopScreenCapture();
       setStats(prev => ({ ...prev, isCapturing: false }));
-      Alert.alert('Success', 'Screen capture stopped');
+      setIsProcessing(false);
+      
+      Alert.alert('Success', 'Sequential screen capture stopped');
     } catch (error) {
       console.error('❌ Error stopping capture:', error);
       Alert.alert('Error', 'Failed to stop screen capture');
@@ -162,15 +184,20 @@ export default function ScreenCaptureScreen() {
     }
   };
 
-  const processCapture = async (captureData: CaptureData) => {
+  const processCapture = async (captureData: CaptureData): Promise<void> => {
     if (isProcessing) {
-      console.log('⏳ Already processing, skipping capture');
+      const timestamp = new Date().toISOString();
+      console.log(`⏳ [${timestamp}] Already processing, skipping capture`);
       return;
     }
 
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    
     setIsProcessing(true);
     try {
-      console.log('🚀 Processing capture...');
+      console.log(`🚀 [${timestamp}] Sending to server...`);
+      
       const response = await fetch('http://192.168.100.47:3000/analyze', {
         method: 'POST',
         headers: {
@@ -185,28 +212,48 @@ export default function ScreenCaptureScreen() {
       });
 
       const result = await response.json();
-      console.log('📊 Analysis result:', result.analysis.category, 'confidence:', result.analysis.confidence);
+      const processingTime = Date.now() - startTime;
+      const responseTimestamp = new Date().toISOString();
+      
+      console.log(`📊 [${responseTimestamp}] Analysis complete (${processingTime}ms):`, result.analysis.category, 'confidence:', result.analysis.confidence);
       
       // Handle the analysis result
       if (result.analysis.harmful && result.analysis.action === 'scroll') {
-        console.log('⚠️ Harmful content detected - would trigger scroll');
+        console.log(`⚠️ [${responseTimestamp}] Harmful content detected - would trigger scroll`);
         // TODO: Trigger scroll action
       } else if (result.analysis.harmful && result.analysis.action === 'blur') {
-        console.log('⚠️ Harmful content detected - would trigger blur');
+        console.log(`⚠️ [${responseTimestamp}] Harmful content detected - would trigger blur`);
         // TODO: Trigger blur action
       } else {
-        console.log('✅ Content safe - continuing');
+        console.log(`✅ [${responseTimestamp}] Content safe - continuing`);
       }
 
     } catch (error) {
-      console.error('❌ Error processing capture:', error);
-      // Continue processing even if backend fails
+      const errorTimestamp = new Date().toISOString();
+      console.error(`❌ [${errorTimestamp}] Error processing capture:`, error);
+      // Continue loop even if backend fails
     } finally {
       setIsProcessing(false);
-      // Small delay before next capture can be processed
-      setTimeout(() => {
-        // Ready for next capture
-      }, 100);
+      
+      // CRITICAL: Continue the loop after processing
+      if (captureLoop) {
+        const nextTimestamp = new Date().toISOString();
+        console.log(`🔄 [${nextTimestamp}] Triggering next capture...`);
+        setTimeout(() => {
+          triggerNextCapture();
+        }, 200); // Small delay to prevent overwhelming
+      }
+    }
+  };
+
+  const triggerNextCapture = async () => {
+    const timestamp = new Date().toISOString();
+    try {
+      console.log(`🎯 [${timestamp}] Calling captureNextFrame...`);
+      await ScreenCaptureModule.captureNextFrame();
+      console.log(`✅ [${timestamp}] captureNextFrame completed`);
+    } catch (error) {
+      console.error(`❌ [${timestamp}] Error triggering next capture:`, error);
     }
   };
 
@@ -263,8 +310,8 @@ export default function ScreenCaptureScreen() {
       <View style={styles.statusGrid}>
         <StatusCard 
           title="Status" 
-          value={stats.isCapturing ? 'CAPTURING' : 'STOPPED'} 
-          color={stats.isCapturing ? '#4CAF50' : '#F44336'} 
+          value={captureLoop ? 'SEQUENTIAL' : 'STOPPED'} 
+          color={captureLoop ? '#4CAF50' : '#F44336'} 
         />
         <StatusCard 
           title="Total Captures" 
@@ -278,8 +325,8 @@ export default function ScreenCaptureScreen() {
         />
         <StatusCard 
           title="Processing" 
-          value={isProcessing ? 'ANALYZING' : 'READY'} 
-          color={isProcessing ? '#FF9800' : '#4CAF50'} 
+          value={isProcessing ? 'ANALYZING' : (captureLoop ? 'WAITING' : 'READY')} 
+          color={isProcessing ? '#FF9800' : (captureLoop ? '#2196F3' : '#4CAF50')} 
         />
         <StatusCard 
           title="Permission" 
@@ -305,23 +352,23 @@ export default function ScreenCaptureScreen() {
           </TouchableOpacity>
         )}
 
-        {permissionGranted && !stats.isCapturing && (
+        {permissionGranted && !captureLoop && (
           <TouchableOpacity
             style={[styles.button, { backgroundColor: '#4CAF50' }]}
             onPress={startCapture}
             disabled={loading}
           >
-            <Text style={styles.buttonText}>🎬 Start Capture</Text>
+            <Text style={styles.buttonText}>🎬 Start Sequential Capture</Text>
           </TouchableOpacity>
         )}
 
-        {stats.isCapturing && (
+        {captureLoop && (
           <TouchableOpacity
             style={[styles.button, { backgroundColor: '#F44336' }]}
             onPress={stopCapture}
             disabled={loading}
           >
-            <Text style={styles.buttonText}>🛑 Stop Capture</Text>
+            <Text style={styles.buttonText}>🛑 Stop Sequential Capture</Text>
           </TouchableOpacity>
         )}
       </View>
