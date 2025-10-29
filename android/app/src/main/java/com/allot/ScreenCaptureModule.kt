@@ -39,6 +39,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var captureHandler: Handler? = null
         private var captureRunnable: Runnable? = null
         private var captureInterval = 100L // 100ms = 10 FPS
+        private var shouldProcessNextFrame = false // Control frame processing
     }
 
     override fun getName(): String {
@@ -208,17 +209,8 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             
             Log.d(TAG, "🎯 Requesting next frame capture...")
             
-            // Force a capture by briefly enabling processing
-            // The ImageReader should have frames available from the VirtualDisplay
-            Thread {
-                try {
-                    // Small delay to ensure frame is available
-                    Thread.sleep(50)
-                    Log.d(TAG, "🎯 Frame capture request processed")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error in frame capture thread: ${e.message}")
-                }
-            }.start()
+            // Set flag to process the next available frame
+            shouldProcessNextFrame = true
             
             promise.resolve(true)
         } catch (e: Exception) {
@@ -289,8 +281,11 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                         try {
                             val image = reader.acquireLatestImage()
                             if (image != null) {
-                                // Process image on background thread to avoid blocking
-                                Thread {
+                                // Only process if we're actively capturing AND a frame was requested
+                                if (isCapturing && shouldProcessNextFrame) {
+                                    shouldProcessNextFrame = false // Reset flag
+                                    Log.d(TAG, "🎯 Processing requested frame")
+                                    Thread {
                                             try {
                                                 processImage(image)
                                             } finally {
@@ -298,6 +293,9 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                                             }
                                         }
                                         .start()
+                                } else {
+                                    image.close() // Discard if not requested
+                                }
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Error in image listener: ${e.message}", e)

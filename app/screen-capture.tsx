@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Alert,
   DeviceEventEmitter,
@@ -47,31 +47,14 @@ export default function ScreenCaptureScreen() {
   const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [captureLoop, setCaptureLoop] = useState(false);
+  const isProcessingRef = useRef(false);
+  const captureLoopRef = useRef(false);
 
   useEffect(() => {
     // Check if already capturing
     checkCaptureStatus();
 
-    // Listen for screen capture events - now part of sequential loop
-    const captureListener = DeviceEventEmitter.addListener('onScreenCaptured', async (data: CaptureData) => {
-      const timestamp = new Date().toISOString();
-      console.log(`📸 [${timestamp}] Screen captured:`, data.width + 'x' + data.height);
-      
-      setLastCapture(data);
-      setStats(prev => ({
-        ...prev,
-        totalCaptures: prev.totalCaptures + 1,
-        lastCaptureTime: data.timestamp,
-      }));
-
-      // ALWAYS process captures automatically when loop is active
-      if (captureLoop) {
-        console.log(`🔄 [${timestamp}] Starting automatic processing...`);
-        processCapture(data); // Don't await here to prevent blocking
-      }
-    });
-
-    // Listen for permission results
+    // Listen for permission results (this doesn't depend on captureLoop)
     const permissionListener = DeviceEventEmitter.addListener('onScreenCapturePermissionResult', (result) => {
       console.log('🔐 Permission result:', result);
       setPermissionGranted(result.granted);
@@ -81,10 +64,40 @@ export default function ScreenCaptureScreen() {
     });
 
     return () => {
-      captureListener.remove();
       permissionListener.remove();
     };
   }, []);
+
+  // Separate useEffect for capture listener that depends on captureLoop
+  useEffect(() => {
+    // Listen for screen capture events - recreate when captureLoop changes
+    const captureListener = DeviceEventEmitter.addListener('onScreenCaptured', async (data: CaptureData) => {
+      const timestamp = new Date().toISOString();
+      console.log(`📸 [${timestamp}] Screen captured:`, data.width + 'x' + data.height);
+      console.log(`🔍 [${timestamp}] captureLoop state:`, captureLoop);
+      
+      setLastCapture(data);
+      setStats(prev => ({
+        ...prev,
+        totalCaptures: prev.totalCaptures + 1,
+        lastCaptureTime: data.timestamp,
+      }));
+
+      // ALWAYS process captures automatically when loop is active
+      if (captureLoopRef.current && !isProcessingRef.current) {
+        console.log(`🔄 [${timestamp}] Starting automatic processing...`);
+        processCapture(data); // Don't await here to prevent blocking
+      } else if (isProcessingRef.current) {
+        console.log(`⏳ [${timestamp}] Already processing, skipping this capture`);
+      } else {
+        console.log(`⏸️ [${timestamp}] captureLoop is false, skipping automatic processing`);
+      }
+    });
+
+    return () => {
+      captureListener.remove();
+    };
+  }, []); // Stable listener using refs
 
   const checkCaptureStatus = async () => {
     try {
@@ -134,6 +147,7 @@ export default function ScreenCaptureScreen() {
       
       // Start the response-driven loop
       setCaptureLoop(true);
+      captureLoopRef.current = true;
       
       // Trigger the first capture to start the loop
       console.log('🔄 Starting sequential loop...');
@@ -158,11 +172,13 @@ export default function ScreenCaptureScreen() {
       
       // Stop the response-driven loop
       setCaptureLoop(false);
+      captureLoopRef.current = false;
       
       // Stop the native capture system
       await ScreenCaptureModule.stopScreenCapture();
       setStats(prev => ({ ...prev, isCapturing: false }));
       setIsProcessing(false);
+      isProcessingRef.current = false;
       
       Alert.alert('Success', 'Sequential screen capture stopped');
     } catch (error) {
@@ -184,8 +200,8 @@ export default function ScreenCaptureScreen() {
     }
   };
 
-  const processCapture = async (captureData: CaptureData): Promise<void> => {
-    if (isProcessing) {
+  const processCapture = useCallback(async (captureData: CaptureData): Promise<void> => {
+    if (isProcessingRef.current) {
       const timestamp = new Date().toISOString();
       console.log(`⏳ [${timestamp}] Already processing, skipping capture`);
       return;
@@ -195,6 +211,7 @@ export default function ScreenCaptureScreen() {
     const timestamp = new Date().toISOString();
     
     setIsProcessing(true);
+    isProcessingRef.current = true;
     try {
       console.log(`🚀 [${timestamp}] Sending to server...`);
       
@@ -234,9 +251,10 @@ export default function ScreenCaptureScreen() {
       // Continue loop even if backend fails
     } finally {
       setIsProcessing(false);
+      isProcessingRef.current = false;
       
       // CRITICAL: Continue the loop after processing
-      if (captureLoop) {
+      if (captureLoopRef.current) {
         const nextTimestamp = new Date().toISOString();
         console.log(`🔄 [${nextTimestamp}] Triggering next capture...`);
         setTimeout(() => {
@@ -244,9 +262,9 @@ export default function ScreenCaptureScreen() {
         }, 200); // Small delay to prevent overwhelming
       }
     }
-  };
+  }, [triggerNextCapture]);
 
-  const triggerNextCapture = async () => {
+  const triggerNextCapture = useCallback(async () => {
     const timestamp = new Date().toISOString();
     try {
       console.log(`🎯 [${timestamp}] Calling captureNextFrame...`);
@@ -255,7 +273,7 @@ export default function ScreenCaptureScreen() {
     } catch (error) {
       console.error(`❌ [${timestamp}] Error triggering next capture:`, error);
     }
-  };
+  }, []);
 
   const sendToBackend = async () => {
     if (!lastCapture) {
