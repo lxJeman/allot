@@ -136,7 +136,7 @@ export default function PermissionsScreen() {
     setLoading(true);
     try {
       console.log('🔔 Requesting notification permission...');
-      
+
       // First check if notifications are already enabled
       const isEnabled = await NotificationModule.checkNotificationPermission();
       console.log('🔔 Current notification status:', isEnabled);
@@ -147,7 +147,7 @@ export default function PermissionsScreen() {
         setPermissions(prev => ({ ...prev, notifications: true }));
       } else {
         console.log('❌ Notifications disabled - requesting permission');
-        
+
         // Show explanation first, then request permission
         Alert.alert(
           'Enable Notifications',
@@ -161,19 +161,19 @@ export default function PermissionsScreen() {
                   console.log('🔔 Requesting notification permission...');
                   await NotificationModule.requestNotificationPermission();
                   console.log('🔔 Permission request completed');
-                  
+
                   // Check permissions again after user returns from settings or grants permission
                   setTimeout(async () => {
                     console.log('🔔 Checking notification status after permission request...');
                     await checkAllPermissions();
-                    
+
                     // Check if permission was granted
                     const newStatus = await NotificationModule.checkNotificationPermission();
                     if (newStatus) {
                       Alert.alert('Success!', 'Notification permission granted. You can now receive monitoring alerts.');
                     } else {
                       Alert.alert(
-                        'Permission Required', 
+                        'Permission Required',
                         'Notifications are still disabled. Please enable them in your device settings to receive monitoring alerts.',
                         [
                           { text: 'OK', style: 'default' },

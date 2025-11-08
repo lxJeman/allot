@@ -40,6 +40,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var captureRunnable: Runnable? = null
         private var captureInterval = 100L // 100ms = 10 FPS
         private var shouldProcessNextFrame = false // Control frame processing
+        private var lastCapturedFrame: ScreenCaptureService.CapturedFrame? = null
     }
 
     override fun getName(): String {
@@ -129,8 +130,11 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                                 Log.d(TAG, "🖼️ Setting up image capture...")
                                 setupImageCapture()
 
-                                // 5. Start capture loop
-                                startCaptureLoop()
+                                // 5. Connect service to trigger captures
+                                connectServiceCallbacks()
+                                
+                                // 6. Start native capture loop in service
+                                ScreenCaptureService.getInstance()?.startCaptureLoop()
 
                                 isCapturing = true
                                 Log.d(TAG, "✅ Screen capture started successfully")
@@ -342,15 +346,25 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
             // Save to cache (optional)
             val cacheFile = saveBitmapToCache(croppedBitmap)
+            
+            val timestamp = System.currentTimeMillis()
 
-            // Send to React Native
+            // Store last captured frame for native backend
+            lastCapturedFrame = ScreenCaptureService.CapturedFrame(
+                base64 = base64,
+                width = image.width,
+                height = image.height,
+                timestamp = timestamp
+            )
+
+            // Send to React Native (if available)
             val params =
                     Arguments.createMap().apply {
                         putString("base64", base64)
                         putString("filePath", cacheFile?.absolutePath)
                         putInt("width", image.width)
                         putInt("height", image.height)
-                        putDouble("timestamp", System.currentTimeMillis().toDouble())
+                        putDouble("timestamp", timestamp.toDouble())
                     }
 
             sendEvent("onScreenCaptured", params)
@@ -404,15 +418,49 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    private fun startCaptureLoop() {
-        // No automatic loop - capture is now completely on-demand
-        Log.d(TAG, "🔄 On-demand capture system ready - no automatic intervals")
+    private fun connectServiceCallbacks() {
+        Log.d(TAG, "🔗 Connecting service callbacks...")
+        
+        val service = ScreenCaptureService.getInstance()
+        if (service == null) {
+            Log.w(TAG, "⚠️ Service not available for callbacks")
+            return
+        }
+        
+        // Set callback to trigger captures from service
+        service.onTriggerCapture = {
+            try {
+                // Request next frame
+                shouldProcessNextFrame = true
+                Log.v(TAG, "🎯 Frame requested by service")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error triggering capture: ${e.message}")
+            }
+        }
+        
+        // Set callback to get captured frame (for native backend)
+        service.onGetCapturedFrame = {
+            lastCapturedFrame
+        }
+        
+        // Enable native backend by default
+        service.setNativeBackendEnabled(true)
+        
+        Log.d(TAG, "✅ Service callbacks connected")
+    }
+    
+    private fun disconnectServiceCallbacks() {
+        ScreenCaptureService.getInstance()?.let { service ->
+            service.onTriggerCapture = null
+            service.onCaptureCallback = null
+            Log.d(TAG, "🔌 Service callbacks disconnected")
+        }
     }
 
     private fun stopCaptureLoop() {
-        captureRunnable?.let { captureHandler?.removeCallbacks(it) }
-        captureHandler = null
-        captureRunnable = null
+        ScreenCaptureService.getInstance()?.stopCaptureLoop()
+        disconnectServiceCallbacks()
+        Log.d(TAG, "🛑 Capture loop stopped")
     }
 
     private fun cleanupCapture() {

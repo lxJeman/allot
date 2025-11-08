@@ -11,7 +11,9 @@ class ScreenPermissionPackage : ReactPackage {
             ScreenPermissionModule(reactContext),
             NotificationModule(reactContext),
             AccessibilityControlModule(reactContext),
-            ContentBlockingModule(reactContext)
+            ContentBlockingModule(reactContext),
+            AppDetectionModule(reactContext),
+            BatteryOptimizationModule(reactContext)
         )
     }
 

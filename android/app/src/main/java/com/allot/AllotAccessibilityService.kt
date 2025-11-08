@@ -1,8 +1,14 @@
 package com.allot
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.Intent
+import android.graphics.Path
 import android.graphics.PixelFormat
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -20,35 +26,79 @@ class AllotAccessibilityService : AccessibilityService() {
         fun getInstance(): AllotAccessibilityService? = instance
         
         fun isServiceRunning(): Boolean = instance != null
+        
+        // Monitored apps (social media)
+        private val MONITORED_APPS = setOf(
+            "com.zhiliaoapp.musically", // TikTok
+            "com.instagram.android",     // Instagram
+            "com.facebook.katana",       // Facebook
+            "com.twitter.android",       // Twitter
+            "com.reddit.frontpage"       // Reddit
+        )
     }
     
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
+    private var currentApp: String? = null
+    private var isMonitoredApp: Boolean = false
+    private val handler = Handler(Looper.getMainLooper())
+    
+    // Callback for app changes
+    var onAppChanged: ((String, Boolean) -> Unit)? = null
     
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        Log.d(TAG, "Accessibility service connected")
+        Log.d(TAG, "✅ Accessibility service connected")
     }
     
     override fun onDestroy() {
         super.onDestroy()
         instance = null
         removeOverlay()
-        Log.d(TAG, "Accessibility service destroyed")
+        onAppChanged = null
+        Log.d(TAG, "❌ Accessibility service destroyed")
     }
     
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Handle accessibility events here
         event?.let {
-            Log.v(TAG, "Accessibility event: ${it.eventType} from ${it.packageName}")
+            // Detect app changes
+            if (it.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                val packageName = it.packageName?.toString()
+                if (packageName != null && packageName != currentApp) {
+                    currentApp = packageName
+                    isMonitoredApp = MONITORED_APPS.contains(packageName)
+                    
+                    val appName = when (packageName) {
+                        "com.zhiliaoapp.musically" -> "TikTok"
+                        "com.instagram.android" -> "Instagram"
+                        "com.facebook.katana" -> "Facebook"
+                        "com.twitter.android" -> "Twitter"
+                        "com.reddit.frontpage" -> "Reddit"
+                        else -> packageName
+                    }
+                    
+                    if (isMonitoredApp) {
+                        Log.d(TAG, "📱 Switched to monitored app: $appName")
+                    } else {
+                        Log.v(TAG, "📱 Switched to: $appName (not monitored)")
+                    }
+                    
+                    // Notify callback
+                    onAppChanged?.invoke(packageName, isMonitoredApp)
+                }
+            }
         }
     }
     
     override fun onInterrupt() {
-        Log.d(TAG, "Accessibility service interrupted")
+        Log.d(TAG, "⚠️ Accessibility service interrupted")
     }
+    
+    fun getCurrentApp(): String? = currentApp
+    
+    fun isCurrentAppMonitored(): Boolean = isMonitoredApp
     
     fun showOverlay(message: String = "Allot Active") {
         try {
@@ -145,16 +195,68 @@ class AllotAccessibilityService : AccessibilityService() {
         }
     }
     
-    fun performAutoScroll() {
-        try {
-            Log.d(TAG, "Performing auto scroll")
+    fun performAutoScroll(): Boolean {
+        return try {
+            Log.d(TAG, "⏭️  Performing auto scroll...")
             
-            // TODO: Implement gesture-based scrolling
-            // This would require API 24+ for gesture support
-            Log.d(TAG, "Auto scroll functionality - to be implemented")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                // Get screen dimensions
+                val displayMetrics = DisplayMetrics()
+                windowManager?.defaultDisplay?.getMetrics(displayMetrics)
+                val screenHeight = displayMetrics.heightPixels
+                val screenWidth = displayMetrics.widthPixels
+                
+                // Create swipe gesture (swipe up to scroll down)
+                val swipePath = Path()
+                val startX = screenWidth / 2f
+                val startY = screenHeight * 0.7f  // Start at 70% down
+                val endY = screenHeight * 0.3f    // End at 30% down
+                
+                swipePath.moveTo(startX, startY)
+                swipePath.lineTo(startX, endY)
+                
+                val gestureBuilder = GestureDescription.Builder()
+                val strokeDescription = GestureDescription.StrokeDescription(
+                    swipePath,
+                    0,      // Start time
+                    300     // Duration (300ms for smooth scroll)
+                )
+                
+                gestureBuilder.addStroke(strokeDescription)
+                val gesture = gestureBuilder.build()
+                
+                // Dispatch gesture
+                val result = dispatchGesture(gesture, object : GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        Log.d(TAG, "✅ Auto scroll completed")
+                    }
+                    
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        Log.w(TAG, "⚠️ Auto scroll cancelled")
+                    }
+                }, null)
+                
+                if (result) {
+                    Log.d(TAG, "✅ Auto scroll gesture dispatched")
+                } else {
+                    Log.w(TAG, "⚠️ Failed to dispatch auto scroll gesture")
+                }
+                
+                result
+            } else {
+                Log.w(TAG, "⚠️ Auto scroll requires Android N (API 24) or higher")
+                // Fallback: Try to use back action as scroll is not available
+                performGlobalAction(GLOBAL_ACTION_BACK)
+                true
+            }
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error performing auto scroll: ${e.message}", e)
+            Log.e(TAG, "❌ Error performing auto scroll: ${e.message}", e)
+            false
         }
+    }
+    
+    fun performScrollDown(): Boolean {
+        return performAutoScroll()
     }
 }
