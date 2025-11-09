@@ -26,6 +26,7 @@ dependencies = [
  "chrono",
  "hex",
  "image",
+ "once_cell",
  "reqwest",
  "serde",
  "serde_json",

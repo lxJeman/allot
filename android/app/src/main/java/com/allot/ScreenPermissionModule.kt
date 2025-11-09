@@ -93,9 +93,16 @@ class ScreenPermissionModule(reactContext: ReactApplicationContext) : ReactConte
             )
             
             val packageName = reactApplicationContext.packageName
-            val isEnabled = enabledServices?.contains(packageName) ?: false
+            val isEnabledInSettings = enabledServices?.contains(packageName) ?: false
+            val isServiceRunning = AllotAccessibilityService.isServiceRunning()
             
-            Log.d(TAG, "Accessibility enabled for $packageName: $isEnabled")
+            // Service is truly enabled only if both conditions are met
+            val isEnabled = isEnabledInSettings && isServiceRunning
+            
+            Log.d(TAG, "Accessibility check for $packageName:")
+            Log.d(TAG, "  - Enabled in Settings: $isEnabledInSettings")
+            Log.d(TAG, "  - Service Running: $isServiceRunning")
+            Log.d(TAG, "  - Final Status: $isEnabled")
             Log.d(TAG, "Enabled services: $enabledServices")
             
             promise.resolve(isEnabled)
@@ -202,12 +209,18 @@ class ScreenPermissionModule(reactContext: ReactApplicationContext) : ReactConte
             val mediaProjectionManager = reactApplicationContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
             permissions.putBoolean("screenCapture", mediaProjectionManager != null)
             
-            // Accessibility
+            // Accessibility - check both Settings AND actual service instance
             val enabledServices = Settings.Secure.getString(
                 reactApplicationContext.contentResolver,
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
             )
-            val isAccessibilityEnabled = enabledServices?.contains(reactApplicationContext.packageName) ?: false
+            val isEnabledInSettings = enabledServices?.contains(reactApplicationContext.packageName) ?: false
+            val isServiceRunning = AllotAccessibilityService.isServiceRunning()
+            
+            // Service is truly enabled only if both conditions are met
+            val isAccessibilityEnabled = isEnabledInSettings && isServiceRunning
+            
+            Log.d(TAG, "Accessibility check - Settings: $isEnabledInSettings, Service Running: $isServiceRunning, Final: $isAccessibilityEnabled")
             permissions.putBoolean("accessibility", isAccessibilityEnabled)
             
             // Overlay

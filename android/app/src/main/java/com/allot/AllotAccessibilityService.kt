@@ -50,7 +50,15 @@ class AllotAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        Log.d(TAG, "✅ Accessibility service connected")
+        Log.d(TAG, "")
+        Log.d(TAG, "✅ ═══════════════════════════════════════")
+        Log.d(TAG, "✅ ACCESSIBILITY SERVICE CONNECTED")
+        Log.d(TAG, "✅ ═══════════════════════════════════════")
+        Log.d(TAG, "✅ Service instance set: ${instance != null}")
+        Log.d(TAG, "✅ WindowManager ready: ${windowManager != null}")
+        Log.d(TAG, "✅ Service is now available for content blocking")
+        Log.d(TAG, "✅ ═══════════════════════════════════════")
+        Log.d(TAG, "")
     }
     
     override fun onDestroy() {
