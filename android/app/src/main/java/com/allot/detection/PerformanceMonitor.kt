@@ -319,6 +319,13 @@ class OperationTimer(
         }
         monitor.recordOperation(operationName, duration, false, metadata)
     }
+    
+    /**
+     * Get elapsed time without completing the operation
+     */
+    fun getElapsedTime(): Long {
+        return System.currentTimeMillis() - startTime
+    }
 }
 
 /**

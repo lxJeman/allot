@@ -30,6 +30,12 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
     private val motionThresholdEvaluator by lazy { MotionThresholdEvaluator() }
     private val motionAnalyzer by lazy { MotionAnalyzer(motionEngine, motionThresholdEvaluator) }
     
+    // State machine components
+    private val stateMachine by lazy { ContentStateMachine() }
+    
+    // Pre-filter pipeline components
+    private val preFilterPipeline by lazy { PreFilterPipeline() }
+    
     // Coroutine scope for async operations
     private val moduleScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -656,6 +662,206 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
                     ))
                 }
                 
+                // Test 5: State Machine Functionality
+                try {
+                    // Reset state machine for clean test
+                    stateMachine.reset()
+                    
+                    val testBitmap = PerceptualHashGenerator.createTestBitmap(100, 100, TestPattern.SOLID)
+                    val fingerprint = PerceptualHashGenerator.generateFrameFingerprint(testBitmap, System.currentTimeMillis())
+                    
+                    // Test normal scanning state
+                    val frameContext = FrameContext(
+                        fingerprint = fingerprint,
+                        similarity = 0.5f,
+                        motionDetected = false,
+                        isHarmfulContent = false,
+                        confidenceScore = 0.8f
+                    )
+                    
+                    val decision = stateMachine.processFrame(frameContext)
+                    testBitmap.recycle()
+                    
+                    val issues = mutableListOf<String>()
+                    if (stateMachine.getCurrentState() != DetectionState.SCANNING) {
+                        issues.add("State machine not in SCANNING state initially")
+                    }
+                    if (!decision.shouldAnalyze) {
+                        issues.add("Should analyze in SCANNING state with low similarity")
+                    }
+                    if (decision.processingTimeMs > 10) {
+                        issues.add("State machine processing too slow: ${decision.processingTimeMs}ms")
+                    }
+                    
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "State Machine Functionality",
+                        "passed" to issues.isEmpty(),
+                        "processingTimeMs" to decision.processingTimeMs,
+                        "currentState" to stateMachine.getCurrentState().name,
+                        "issues" to issues
+                    ))
+                    
+                    if (issues.isNotEmpty()) allTestsPassed = false
+                    
+                } catch (e: Exception) {
+                    allTestsPassed = false
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "State Machine Functionality",
+                        "passed" to false,
+                        "error" to (e.message ?: "Unknown error"),
+                        "issues" to listOf("State machine test failed: ${e.message ?: "Unknown error"}")
+                    ))
+                }
+                
+                // Test 6: State Transitions
+                try {
+                    // Test harmful content detection transition
+                    stateMachine.forceStateTransition(DetectionState.HARMFUL_DETECTED, "Test harmful content")
+                    
+                    val issues = mutableListOf<String>()
+                    if (stateMachine.getCurrentState() != DetectionState.HARMFUL_DETECTED) {
+                        issues.add("Failed to transition to HARMFUL_DETECTED state")
+                    }
+                    
+                    // Test state history
+                    val history = stateMachine.getStateHistory()
+                    if (history.isEmpty()) {
+                        issues.add("State history not being tracked")
+                    }
+                    
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "State Transitions",
+                        "passed" to issues.isEmpty(),
+                        "currentState" to stateMachine.getCurrentState().name,
+                        "historySize" to history.size,
+                        "issues" to issues
+                    ))
+                    
+                    if (issues.isNotEmpty()) allTestsPassed = false
+                    
+                } catch (e: Exception) {
+                    allTestsPassed = false
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "State Transitions",
+                        "passed" to false,
+                        "error" to (e.message ?: "Unknown error"),
+                        "issues" to listOf("State transition test failed: ${e.message ?: "Unknown error"}")
+                    ))
+                }
+                
+                // Test 7: Temporal Awareness and Cooldown
+                try {
+                    // Reset for clean test
+                    stateMachine.reset()
+                    
+                    // Test cooldown functionality
+                    val cooldownStatus = stateMachine.getCooldownStatus()
+                    val temporalStats = stateMachine.getTemporalAwarenessStats()
+                    
+                    val issues = mutableListOf<String>()
+                    if (cooldownStatus.isInCooldown) {
+                        issues.add("Should not be in cooldown initially")
+                    }
+                    if (temporalStats.totalPatterns < 0) {
+                        issues.add("Invalid temporal pattern count")
+                    }
+                    
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Temporal Awareness and Cooldown",
+                        "passed" to issues.isEmpty(),
+                        "cooldownActive" to cooldownStatus.isInCooldown,
+                        "totalPatterns" to temporalStats.totalPatterns,
+                        "activePatterns" to temporalStats.activePatterns,
+                        "issues" to issues
+                    ))
+                    
+                    if (issues.isNotEmpty()) allTestsPassed = false
+                    
+                } catch (e: Exception) {
+                    allTestsPassed = false
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Temporal Awareness and Cooldown",
+                        "passed" to false,
+                        "error" to (e.message ?: "Unknown error"),
+                        "issues" to listOf("Temporal awareness test failed: ${e.message ?: "Unknown error"}")
+                    ))
+                }
+                
+                // Test 8: Pre-filter Pipeline Infrastructure
+                try {
+                    // Reset pipeline for clean test
+                    preFilterPipeline.reset()
+                    
+                    // Add similarity and motion filter stages
+                    val similarityStage = SimilarityFilterStage(
+                        name = "SimilarityFilter",
+                        priority = 1,
+                        defaultThreshold = 0.9f,
+                        similarityAnalyzer = similarityAnalyzer
+                    )
+                    
+                    val motionStage = MotionFilterStage(
+                        name = "MotionFilter", 
+                        priority = 2,
+                        defaultThreshold = 0.25f,
+                        motionEngine = motionEngine,
+                        motionAnalyzer = motionAnalyzer
+                    )
+                    
+                    preFilterPipeline.addFilterStage(similarityStage)
+                    preFilterPipeline.addFilterStage(motionStage)
+                    
+                    // Create test frame
+                    val testBitmap = PerceptualHashGenerator.createTestBitmap(100, 100, TestPattern.SOLID)
+                    val fingerprint = PerceptualHashGenerator.generateFrameFingerprint(testBitmap, System.currentTimeMillis())
+                    val capturedFrame = CapturedFrame(
+                        bitmap = testBitmap,
+                        timestamp = System.currentTimeMillis(),
+                        fingerprint = fingerprint
+                    )
+                    
+                    // Test pipeline execution
+                    val filterContext = FilterContext(
+                        currentState = DetectionState.SCANNING,
+                        configuration = FilterConfiguration(enableVerboseLogging = false)
+                    )
+                    
+                    val decision = preFilterPipeline.shouldAnalyze(capturedFrame, filterContext)
+                    testBitmap.recycle()
+                    
+                    val issues = mutableListOf<String>()
+                    if (decision.totalStagesExecuted < 1) {
+                        issues.add("Expected at least 1 stage executed, got ${decision.totalStagesExecuted}")
+                    }
+                    if (decision.processingTimeMs > 10) {
+                        issues.add("Pipeline processing too slow: ${decision.processingTimeMs}ms")
+                    }
+                    if (decision.stageResults.isEmpty()) {
+                        issues.add("No stage results returned")
+                    }
+                    
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Pre-filter Pipeline with Real Stages",
+                        "passed" to issues.isEmpty(),
+                        "processingTimeMs" to decision.processingTimeMs,
+                        "stagesExecuted" to decision.totalStagesExecuted,
+                        "shouldProceed" to decision.shouldProceed,
+                        "activeStages" to preFilterPipeline.getActiveStages().size,
+                        "issues" to issues
+                    ))
+                    
+                    if (issues.isNotEmpty()) allTestsPassed = false
+                    
+                } catch (e: Exception) {
+                    allTestsPassed = false
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Pre-filter Pipeline with Real Stages",
+                        "passed" to false,
+                        "error" to (e.message ?: "Unknown error"),
+                        "issues" to listOf("Pre-filter pipeline test failed: ${e.message ?: "Unknown error"}")
+                    ))
+                }
+                
                 val summary = "Completed ${testResults.size} tests. " +
                     "${testResults.count { (it["passed"] as Boolean) }} passed, " +
                     "${testResults.count { !(it["passed"] as Boolean) }} failed."
@@ -698,6 +904,580 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
     }
     
     /**
+     * Test state machine with frame context
+     */
+    @ReactMethod
+    fun testStateMachine(
+        base64Image: String,
+        similarity: Double,
+        motionDetected: Boolean,
+        isHarmfulContent: Boolean,
+        confidenceScore: Double,
+        promise: Promise
+    ) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("test_state_machine")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Generate fingerprint
+                val fingerprint = PerceptualHashGenerator.generateFrameFingerprint(
+                    bitmap = bitmap,
+                    timestamp = System.currentTimeMillis()
+                )
+                
+                // Create frame context
+                val frameContext = FrameContext(
+                    fingerprint = fingerprint,
+                    similarity = similarity.toFloat(),
+                    motionDetected = motionDetected,
+                    isHarmfulContent = isHarmfulContent,
+                    confidenceScore = confidenceScore.toFloat()
+                )
+                
+                // Process frame through state machine
+                val decision = stateMachine.processFrame(frameContext)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putString("currentState", stateMachine.getCurrentState().name)
+                    putBoolean("shouldAnalyze", decision.shouldAnalyze)
+                    putDouble("analysisFrequency", decision.analysisFrequency.toDouble())
+                    putDouble("confidenceThreshold", decision.confidenceThreshold.toDouble())
+                    putString("reason", decision.reason)
+                    putBoolean("recommendsStateChange", decision.recommendsStateChange())
+                    putDouble("processingTimeMs", decision.processingTimeMs.toDouble())
+                    
+                    decision.newState?.let { newState ->
+                        putString("newState", newState.name)
+                    }
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error testing state machine: ${e.message}", e)
+                promise.reject("STATE_MACHINE_TEST_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Force state transition for testing
+     */
+    @ReactMethod
+    fun forceStateTransition(stateName: String, reason: String, promise: Promise) {
+        try {
+            val detectionState = when (stateName.uppercase()) {
+                "SCANNING" -> DetectionState.SCANNING
+                "HARMFUL_DETECTED" -> DetectionState.HARMFUL_DETECTED
+                "SCROLLING_AWAY" -> DetectionState.SCROLLING_AWAY
+                "COOLDOWN" -> DetectionState.COOLDOWN
+                "SAFE_CONTENT" -> DetectionState.SAFE_CONTENT
+                else -> {
+                    promise.reject("INVALID_STATE", "Invalid state name: $stateName")
+                    return
+                }
+            }
+            
+            stateMachine.forceStateTransition(detectionState, reason)
+            
+            val result = Arguments.createMap().apply {
+                putString("newState", stateMachine.getCurrentState().name)
+                putString("reason", reason)
+                putBoolean("success", true)
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error forcing state transition: ${e.message}", e)
+            promise.reject("FORCE_TRANSITION_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Get current state machine status
+     */
+    @ReactMethod
+    fun getStateMachineStatus(promise: Promise) {
+        try {
+            val stats = stateMachine.getStateMachineStats()
+            val history = stateMachine.getStateHistory()
+            val cooldownStatus = stateMachine.getCooldownStatus()
+            val decisionStats = stateMachine.getAdvancedDecisionStats()
+            
+            val result = Arguments.createMap().apply {
+                putString("currentState", stats.currentState.name)
+                putDouble("timeSinceLastStateChange", stats.timeSinceLastStateChange.toDouble())
+                putDouble("timeSinceLastHarmful", stats.timeSinceLastHarmful.toDouble())
+                putDouble("timeSinceLastAnalysis", stats.timeSinceLastAnalysis.toDouble())
+                putInt("totalTransitions", stats.totalTransitions)
+                putDouble("averageProcessingTimeMs", stats.averageProcessingTimeMs.toDouble())
+                putDouble("historyUtilization", (stats.historyUtilization * 100).toDouble())
+                putString("mostFrequentState", stats.mostFrequentState?.name)
+                
+                // Add state information
+                val stateInfoMap = Arguments.createMap().apply {
+                    putString("displayName", stats.currentState.displayName)
+                    putString("description", stats.currentState.description)
+                    putDouble("defaultAnalysisFrequency", stats.currentState.defaultAnalysisFrequency.toDouble())
+                    putDouble("defaultConfidenceThreshold", stats.currentState.defaultConfidenceThreshold.toDouble())
+                    putDouble("similarityThreshold", stats.currentState.getSimilarityThreshold().toDouble())
+                    putBoolean("allowsNormalAnalysis", stats.currentState.allowsNormalAnalysis())
+                    putBoolean("isProtectiveMode", stats.currentState.isProtectiveMode())
+                    putBoolean("indicatesUserActivity", stats.currentState.indicatesUserActivity())
+                }
+                putMap("stateInfo", stateInfoMap)
+                
+                // Add recent history
+                val historyArray = Arguments.createArray()
+                history.takeLast(10).forEach { transition ->
+                    val transitionMap = Arguments.createMap().apply {
+                        putString("fromState", transition.fromState.name)
+                        putString("toState", transition.toState.name)
+                        putString("reason", transition.reason)
+                        putDouble("ageMs", transition.getAgeMs().toDouble())
+                        putDouble("processingTimeMs", transition.processingTimeMs.toDouble())
+                    }
+                    historyArray.pushMap(transitionMap)
+                }
+                putArray("recentHistory", historyArray)
+                
+                // Add configuration
+                val configMap = Arguments.createMap().apply {
+                    putDouble("cooldownPeriodMs", stats.config.cooldownPeriodMs.toDouble())
+                    putDouble("extendedCooldownMs", stats.config.extendedCooldownMs.toDouble())
+                    putDouble("safeContentThresholdMs", stats.config.safeContentThresholdMs.toDouble())
+                    putInt("maxHistorySize", stats.config.maxHistorySize)
+                    putBoolean("enableVerboseLogging", stats.config.enableVerboseLogging)
+                }
+                putMap("config", configMap)
+                
+                // Add cooldown status
+                val cooldownStatusMap = Arguments.createMap().apply {
+                    putBoolean("isInCooldown", cooldownStatus.isInCooldown)
+                    putString("cooldownType", cooldownStatus.cooldownType.name)
+                    putDouble("remainingTimeMs", cooldownStatus.remainingTimeMs.toDouble())
+                    putInt("extensionCount", cooldownStatus.extensionCount)
+                    putBoolean("safeContentWindowActive", cooldownStatus.safeContentWindowActive)
+                    putDouble("lastHarmfulSimilarity", cooldownStatus.lastHarmfulSimilarity.toDouble())
+                }
+                putMap("cooldownStatus", cooldownStatusMap)
+                
+                // Add advanced decision stats
+                val decisionStatsMap = Arguments.createMap().apply {
+                    putInt("totalDecisions", decisionStats.totalDecisions)
+                    putDouble("averageProcessingTime", decisionStats.averageProcessingTime.toDouble())
+                    putDouble("analysisRate", (decisionStats.analysisRate * 100).toDouble())
+                }
+                putMap("advancedDecisionStats", decisionStatsMap)
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting state machine status: ${e.message}", e)
+            promise.reject("STATE_MACHINE_STATUS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Get detailed cooldown statistics
+     */
+    @ReactMethod
+    fun getCooldownStats(promise: Promise) {
+        try {
+            val cooldownStats = stateMachine.getCooldownManagerStats()
+            val cooldownStatus = stateMachine.getCooldownStatus()
+            
+            val result = Arguments.createMap().apply {
+                // Current status
+                putBoolean("isInCooldown", cooldownStatus.isInCooldown)
+                putString("cooldownType", cooldownStatus.cooldownType.name)
+                putDouble("remainingTimeMs", cooldownStatus.remainingTimeMs.toDouble())
+                putInt("extensionCount", cooldownStatus.extensionCount)
+                putBoolean("safeContentWindowActive", cooldownStatus.safeContentWindowActive)
+                
+                // Statistics
+                putInt("totalCooldowns", cooldownStats.totalCooldowns)
+                putInt("totalExtensions", cooldownStats.totalExtensions)
+                putDouble("averageCooldownDuration", cooldownStats.averageCooldownDuration.toDouble())
+                putInt("temporalWindowCount", cooldownStats.temporalWindowCount)
+                
+                // Safe content stats
+                val safeContentStatsMap = Arguments.createMap().apply {
+                    putInt("totalFrames", cooldownStats.safeContentStats.totalFrames)
+                    putInt("safeFrames", cooldownStats.safeContentStats.safeFrames)
+                    putInt("unsafeFrames", cooldownStats.safeContentStats.unsafeFrames)
+                    putDouble("safeRatio", (cooldownStats.safeContentStats.safeRatio * 100).toDouble())
+                    putDouble("windowDurationMs", cooldownStats.safeContentStats.windowDurationMs.toDouble())
+                    putDouble("oldestFrameAge", cooldownStats.safeContentStats.oldestFrameAge.toDouble())
+                }
+                putMap("safeContentStats", safeContentStatsMap)
+                
+                // Configuration
+                val configMap = Arguments.createMap().apply {
+                    putDouble("baseCooldownPeriodMs", cooldownStats.config.baseCooldownPeriodMs.toDouble())
+                    putDouble("extendedCooldownPeriodMs", cooldownStats.config.extendedCooldownPeriodMs.toDouble())
+                    putDouble("safeContentWindowMs", cooldownStats.config.safeContentWindowMs.toDouble())
+                    putDouble("similarContentThreshold", (cooldownStats.config.similarContentThreshold * 100).toDouble())
+                    putDouble("skipAnalysisThreshold", (cooldownStats.config.skipAnalysisThreshold * 100).toDouble())
+                }
+                putMap("config", configMap)
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting cooldown stats: ${e.message}", e)
+            promise.reject("COOLDOWN_STATS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Get temporal awareness statistics
+     */
+    @ReactMethod
+    fun getTemporalAwarenessStats(promise: Promise) {
+        try {
+            val temporalStats = stateMachine.getTemporalAwarenessStats()
+            
+            val result = Arguments.createMap().apply {
+                // Pattern statistics
+                putInt("totalPatterns", temporalStats.totalPatterns)
+                putInt("activePatterns", temporalStats.activePatterns)
+                
+                // Analysis skip statistics
+                val skipStatsMap = Arguments.createMap().apply {
+                    putInt("totalDecisions", temporalStats.analysisSkipStats.totalDecisions)
+                    putInt("totalSkipped", temporalStats.analysisSkipStats.totalSkipped)
+                    putDouble("skipRate", (temporalStats.analysisSkipStats.skipRate * 100).toDouble())
+                    putDouble("recentSkipRate", (temporalStats.analysisSkipStats.recentSkipRate * 100).toDouble())
+                }
+                putMap("analysisSkipStats", skipStatsMap)
+                
+                // State window statistics
+                val stateWindowStatsMap = Arguments.createMap()
+                temporalStats.stateWindowStats.forEach { (state, stats) ->
+                    val stateStatsMap = Arguments.createMap().apply {
+                        putInt("totalFrames", stats.totalFrames)
+                        putInt("harmfulFrames", stats.harmfulFrames)
+                        putInt("safeFrames", stats.safeFrames)
+                        putDouble("harmfulRatio", (stats.harmfulRatio * 100).toDouble())
+                        putDouble("windowDurationMs", stats.windowDurationMs.toDouble())
+                        putDouble("oldestFrameAge", stats.oldestFrameAge.toDouble())
+                    }
+                    stateWindowStatsMap.putMap(state.name, stateStatsMap)
+                }
+                putMap("stateWindowStats", stateWindowStatsMap)
+                
+                // Basic temporal information
+                putString("temporalEngineStatus", "Active")
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting temporal awareness stats: ${e.message}", e)
+            promise.reject("TEMPORAL_AWARENESS_STATS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Reset state machine to initial state
+     */
+    @ReactMethod
+    fun resetStateMachine(promise: Promise) {
+        try {
+            stateMachine.reset()
+            
+            val result = Arguments.createMap().apply {
+                putString("currentState", stateMachine.getCurrentState().name)
+                putBoolean("success", true)
+                putString("message", "State machine reset to initial state")
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error resetting state machine: ${e.message}", e)
+            promise.reject("RESET_STATE_MACHINE_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Test pre-filter pipeline with a frame
+     */
+    @ReactMethod
+    fun testPreFilterPipeline(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("test_prefilter_pipeline")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Generate fingerprint for the frame
+                val fingerprint = PerceptualHashGenerator.generateFrameFingerprint(
+                    bitmap = bitmap,
+                    timestamp = System.currentTimeMillis()
+                )
+                
+                // Create captured frame
+                val capturedFrame = CapturedFrame(
+                    bitmap = bitmap,
+                    timestamp = System.currentTimeMillis(),
+                    fingerprint = fingerprint,
+                    metadata = mapOf("source" to "react_native_test")
+                )
+                
+                // Create filter context
+                val filterContext = FilterContext(
+                    currentState = stateMachine.getCurrentState(),
+                    timeSinceLastAnalysis = 0L,
+                    timeSinceLastHarmful = 0L,
+                    isInCooldown = false,
+                    configuration = FilterConfiguration(enableVerboseLogging = true)
+                )
+                
+                // Process through pipeline
+                val decision = preFilterPipeline.shouldAnalyze(capturedFrame, filterContext)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putBoolean("shouldProceed", decision.shouldProceed)
+                    putString("reason", decision.reason)
+                    putDouble("processingTimeMs", decision.processingTimeMs.toDouble())
+                    putDouble("executionId", decision.executionId.toDouble())
+                    putInt("totalStagesExecuted", decision.totalStagesExecuted)
+                    putDouble("averageConfidence", (decision.averageConfidence * 100).toDouble())
+                    putBoolean("meetsPerformanceRequirements", decision.meetsPerformanceRequirements())
+                    
+                    // Stage results
+                    val stageResultsArray = Arguments.createArray()
+                    decision.stageResults.forEach { stageResult ->
+                        val stageMap = Arguments.createMap().apply {
+                            putString("stageName", stageResult.stageName)
+                            putBoolean("passed", stageResult.passed)
+                            putDouble("confidence", (stageResult.confidence * 100).toDouble())
+                            putDouble("processingTimeMs", stageResult.processingTimeMs.toDouble())
+                            putString("reason", stageResult.reason)
+                            putBoolean("shouldTerminateEarly", stageResult.shouldTerminateEarly)
+                        }
+                        stageResultsArray.pushMap(stageMap)
+                    }
+                    putArray("stageResults", stageResultsArray)
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error testing pre-filter pipeline: ${e.message}", e)
+                promise.reject("PREFILTER_PIPELINE_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Add a test filter stage to the pipeline
+     */
+    @ReactMethod
+    fun addTestFilterStage(stageName: String, priority: Int, passRate: Double, promise: Promise) {
+        try {
+            val testStage = TestFilterStage(
+                name = stageName,
+                priority = priority,
+                passRate = passRate.toFloat(),
+                simulatedProcessingTimeMs = 1L
+            )
+            
+            preFilterPipeline.addFilterStage(testStage)
+            
+            val result = Arguments.createMap().apply {
+                putString("stageName", stageName)
+                putInt("priority", priority)
+                putDouble("passRate", passRate)
+                putBoolean("success", true)
+                putArray("activeStages", Arguments.createArray().apply {
+                    preFilterPipeline.getActiveStages().forEach { pushString(it) }
+                })
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding test filter stage: ${e.message}", e)
+            promise.reject("ADD_FILTER_STAGE_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Add similarity filter stage to the pipeline
+     */
+    @ReactMethod
+    fun addSimilarityFilterStage(threshold: Double, promise: Promise) {
+        try {
+            val similarityStage = SimilarityFilterStage(
+                name = "SimilarityFilter",
+                priority = 1,
+                defaultThreshold = threshold.toFloat(),
+                similarityAnalyzer = similarityAnalyzer
+            )
+            
+            preFilterPipeline.addFilterStage(similarityStage)
+            
+            val result = Arguments.createMap().apply {
+                putString("stageName", "SimilarityFilter")
+                putInt("priority", 1)
+                putDouble("threshold", threshold)
+                putBoolean("success", true)
+                putArray("activeStages", Arguments.createArray().apply {
+                    preFilterPipeline.getActiveStages().forEach { pushString(it) }
+                })
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding similarity filter stage: ${e.message}", e)
+            promise.reject("ADD_SIMILARITY_FILTER_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Add motion filter stage to the pipeline
+     */
+    @ReactMethod
+    fun addMotionFilterStage(threshold: Double, promise: Promise) {
+        try {
+            val motionStage = MotionFilterStage(
+                name = "MotionFilter",
+                priority = 2,
+                defaultThreshold = threshold.toFloat(),
+                motionEngine = motionEngine,
+                motionAnalyzer = motionAnalyzer
+            )
+            
+            preFilterPipeline.addFilterStage(motionStage)
+            
+            val result = Arguments.createMap().apply {
+                putString("stageName", "MotionFilter")
+                putInt("priority", 2)
+                putDouble("threshold", threshold)
+                putBoolean("success", true)
+                putArray("activeStages", Arguments.createArray().apply {
+                    preFilterPipeline.getActiveStages().forEach { pushString(it) }
+                })
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding motion filter stage: ${e.message}", e)
+            promise.reject("ADD_MOTION_FILTER_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Get pre-filter pipeline statistics
+     */
+    @ReactMethod
+    fun getPreFilterPipelineStats(promise: Promise) {
+        try {
+            val stats = preFilterPipeline.getFilterStats()
+            
+            val result = Arguments.createMap().apply {
+                putDouble("totalExecutions", stats.totalExecutions.toDouble())
+                putDouble("totalFramesProcessed", stats.totalFramesProcessed.toDouble())
+                putDouble("totalFramesSkipped", stats.totalFramesSkipped.toDouble())
+                putDouble("skipRate", stats.getSkipRate().toDouble())
+                putDouble("averageProcessingTimeMs", stats.averageProcessingTimeMs.toDouble())
+                putDouble("maxProcessingTimeMs", stats.maxProcessingTimeMs.toDouble())
+                putBoolean("meetsPerformanceRequirements", stats.meetsPerformanceRequirements())
+                
+                // Pipeline efficiency
+                val efficiencyMap = Arguments.createMap().apply {
+                    putDouble("skipRate", stats.pipelineEfficiency.skipRate.toDouble())
+                    putDouble("processRate", stats.pipelineEfficiency.processRate.toDouble())
+                    putDouble("averageStagesExecuted", stats.pipelineEfficiency.averageStagesExecuted.toDouble())
+                    putDouble("earlyTerminationRate", stats.pipelineEfficiency.earlyTerminationRate.toDouble())
+                }
+                putMap("pipelineEfficiency", efficiencyMap)
+                
+                // Stage statistics
+                val stageStatsArray = Arguments.createArray()
+                stats.stageStats.forEach { stageStats ->
+                    val stageMap = Arguments.createMap().apply {
+                        putString("stageName", stageStats.stageName)
+                        putDouble("totalExecutions", stageStats.totalExecutions.toDouble())
+                        putDouble("passRate", stageStats.getPassRate().toDouble())
+                        putDouble("averageProcessingTimeMs", stageStats.averageProcessingTimeMs.toDouble())
+                        putDouble("maxProcessingTimeMs", stageStats.maxProcessingTimeMs.toDouble())
+                        putDouble("averageConfidence", (stageStats.averageConfidence * 100).toDouble())
+                        putBoolean("meetsPerformanceRequirements", stageStats.meetsPerformanceRequirements(2L))
+                        
+                        val alertsArray = Arguments.createArray()
+                        stageStats.performanceAlerts.forEach { alert ->
+                            alertsArray.pushString(alert)
+                        }
+                        putArray("performanceAlerts", alertsArray)
+                    }
+                    stageStatsArray.pushMap(stageMap)
+                }
+                putArray("stageStats", stageStatsArray)
+                
+                // Performance alerts
+                val alertsArray = Arguments.createArray()
+                stats.performanceAlerts.forEach { alert ->
+                    alertsArray.pushString(alert)
+                }
+                putArray("performanceAlerts", alertsArray)
+                
+                // Active stages
+                val activeStagesArray = Arguments.createArray()
+                preFilterPipeline.getActiveStages().forEach { stage ->
+                    activeStagesArray.pushString(stage)
+                }
+                putArray("activeStages", activeStagesArray)
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting pre-filter pipeline stats: ${e.message}", e)
+            promise.reject("PREFILTER_PIPELINE_STATS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Reset pre-filter pipeline
+     */
+    @ReactMethod
+    fun resetPreFilterPipeline(promise: Promise) {
+        try {
+            preFilterPipeline.reset()
+            
+            val result = Arguments.createMap().apply {
+                putBoolean("success", true)
+                putString("message", "Pre-filter pipeline reset completed")
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error resetting pre-filter pipeline: ${e.message}", e)
+            promise.reject("RESET_PREFILTER_PIPELINE_ERROR", e.message)
+        }
+    }
+    
+    /**
      * Clear all data and reset
      */
     @ReactMethod
@@ -707,6 +1487,8 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
             performanceMonitor.clearAllData()
             motionAnalyzer.clearHistory()
             motionThresholdEvaluator.reset()
+            stateMachine.reset()
+            preFilterPipeline.reset()
             
             promise.resolve(true)
             
