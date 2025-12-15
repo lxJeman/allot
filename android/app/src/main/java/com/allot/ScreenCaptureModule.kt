@@ -124,6 +124,8 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
                         Log.d(TAG, "✅ MediaProjection created successfully")
 
+                        // MediaProjection created successfully - service will use React Native callbacks
+
                         // 4. Set up image capture on main thread
                         Handler(Looper.getMainLooper()).post {
                             try {

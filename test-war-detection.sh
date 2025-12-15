@@ -8,8 +8,8 @@ echo "========================================"
 echo ""
 
 # Check if backend is running
-if ! curl -s http://192.168.100.47:3000/health > /dev/null 2>&1; then
-    echo "❌ Backend not running at http://192.168.100.47:3000"
+if ! curl -s http://192.168.171.18:3000/health > /dev/null 2>&1; then
+    echo "❌ Backend not running at http://192.168.171.18:3000"
     echo "   Start it with: cd rust-backend && cargo run --release"
     exit 1
 fi

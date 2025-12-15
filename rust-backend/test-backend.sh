@@ -12,7 +12,7 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-BACKEND_URL="http://192.168.100.47:3000"
+BACKEND_URL="http://192.168.171.18:3000"
 
 # Test 1: Health Check
 echo "📡 Test 1: Health Check"

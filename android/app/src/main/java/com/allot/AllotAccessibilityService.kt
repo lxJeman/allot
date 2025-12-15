@@ -29,11 +29,20 @@ class AllotAccessibilityService : AccessibilityService() {
         
         // Monitored apps (social media)
         private val MONITORED_APPS = setOf(
-            "com.zhiliaoapp.musically", // TikTok
-            "com.instagram.android",     // Instagram
-            "com.facebook.katana",       // Facebook
-            "com.twitter.android",       // Twitter
-            "com.reddit.frontpage"       // Reddit
+            "com.zhiliaoapp.musically",    // TikTok
+            "com.zhiliaoapp.musically.go", // TikTok Lite
+            "com.ss.android.ugc.trill",    // TikTok Lite (some regions)
+            "com.instagram.android",       // Instagram
+            "com.instagram.lite",          // Instagram Lite
+            "com.facebook.katana",         // Facebook
+            "com.facebook.lite",           // Facebook Lite
+            "com.twitter.android",         // Twitter
+            "com.reddit.frontpage",        // Reddit
+            "com.snapchat.android",        // Snapchat
+            "com.whatsapp",                // WhatsApp
+            "com.discord",                 // Discord
+            "com.pinterest",               // Pinterest
+            "com.linkedin.android"         // LinkedIn
         )
     }
     
@@ -80,10 +89,19 @@ class AllotAccessibilityService : AccessibilityService() {
                     
                     val appName = when (packageName) {
                         "com.zhiliaoapp.musically" -> "TikTok"
+                        "com.zhiliaoapp.musically.go" -> "TikTok Lite"
+                        "com.ss.android.ugc.trill" -> "TikTok Lite"
                         "com.instagram.android" -> "Instagram"
+                        "com.instagram.lite" -> "Instagram Lite"
                         "com.facebook.katana" -> "Facebook"
+                        "com.facebook.lite" -> "Facebook Lite"
                         "com.twitter.android" -> "Twitter"
                         "com.reddit.frontpage" -> "Reddit"
+                        "com.snapchat.android" -> "Snapchat"
+                        "com.whatsapp" -> "WhatsApp"
+                        "com.discord" -> "Discord"
+                        "com.pinterest" -> "Pinterest"
+                        "com.linkedin.android" -> "LinkedIn"
                         else -> packageName
                     }
                     

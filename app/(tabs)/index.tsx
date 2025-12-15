@@ -32,6 +32,18 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </Link>
       </ThemedView>
+
+      <ThemedView style={styles.stepContainer}>
+        <ThemedText type="subtitle">🧪 Test Suite</ThemedText>
+        <ThemedText>
+          Access comprehensive testing tools for Allot's detection systems and performance validation.
+        </ThemedText>
+        <Link href="/tests" asChild>
+          <TouchableOpacity style={[styles.permissionButton, { backgroundColor: '#4CAF50' }]}>
+            <ThemedText style={styles.buttonText}>Open Test Suite</ThemedText>
+          </TouchableOpacity>
+        </Link>
+      </ThemedView>
       <ThemedView style={styles.stepContainer}>
         <Link href="/modal">
           <Link.Trigger>

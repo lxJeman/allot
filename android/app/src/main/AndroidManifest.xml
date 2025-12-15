@@ -11,6 +11,10 @@
   <!-- Notification Permissions -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
   
+  <!-- Battery Optimization and Background Processing -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  
   <!-- OPTIONAL PERMISSIONS, REMOVE WHATEVER YOU DO NOT NEED -->
   <uses-permission android:name="android.permission.VIBRATE"/>
   <!-- These require runtime permissions on M -->

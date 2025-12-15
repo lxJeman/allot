@@ -33,14 +33,14 @@ interface CaptureData {
 export default function ScreenCaptureScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  
+
   const [stats, setStats] = useState<CaptureStats>({
     totalCaptures: 0,
     lastCaptureTime: 0,
     isCapturing: false,
     captureInterval: 100, // 100ms default
   });
-  
+
   const [lastCapture, setLastCapture] = useState<CaptureData | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [resultCode, setResultCode] = useState<number | null>(null);
@@ -75,7 +75,7 @@ export default function ScreenCaptureScreen() {
       const timestamp = new Date().toISOString();
       console.log(`📸 [${timestamp}] Screen captured:`, data.width + 'x' + data.height);
       console.log(`🔍 [${timestamp}] captureLoop state:`, captureLoop);
-      
+
       setLastCapture(data);
       setStats(prev => ({
         ...prev,
@@ -114,7 +114,7 @@ export default function ScreenCaptureScreen() {
       console.log('🔐 Requesting screen capture permission...');
       const result = await ScreenPermissionModule.requestScreenCapturePermission();
       console.log('🔐 Permission result received:', result);
-      
+
       if (result.granted) {
         setPermissionGranted(true);
         setResultCode(result.resultCode);
@@ -144,18 +144,18 @@ export default function ScreenCaptureScreen() {
       // Start the native capture system
       await ScreenCaptureModule.startScreenCapture();
       setStats(prev => ({ ...prev, isCapturing: true }));
-      
+
       // Start the response-driven loop
       setCaptureLoop(true);
       captureLoopRef.current = true;
-      
+
       // Trigger the first capture to start the loop
       console.log('🔄 Starting sequential loop...');
       setTimeout(() => {
         console.log('🎯 Triggering first capture...');
         triggerNextCapture();
       }, 1000); // Give native system time to initialize
-      
+
       Alert.alert('Success', 'Sequential screen capture started! Each screenshot waits for analysis.');
     } catch (error) {
       console.error('❌ Error starting capture:', error);
@@ -169,17 +169,17 @@ export default function ScreenCaptureScreen() {
     setLoading(true);
     try {
       console.log('🛑 Stopping sequential screen capture...');
-      
+
       // Stop the response-driven loop
       setCaptureLoop(false);
       captureLoopRef.current = false;
-      
+
       // Stop the native capture system
       await ScreenCaptureModule.stopScreenCapture();
       setStats(prev => ({ ...prev, isCapturing: false }));
       setIsProcessing(false);
       isProcessingRef.current = false;
-      
+
       Alert.alert('Success', 'Sequential screen capture stopped');
     } catch (error) {
       console.error('❌ Error stopping capture:', error);
@@ -200,6 +200,17 @@ export default function ScreenCaptureScreen() {
     }
   };
 
+  const triggerNextCapture = useCallback(async () => {
+    const timestamp = new Date().toISOString();
+    try {
+      console.log(`🎯 [${timestamp}] Calling captureNextFrame...`);
+      await ScreenCaptureModule.captureNextFrame();
+      console.log(`✅ [${timestamp}] captureNextFrame completed`);
+    } catch (error) {
+      console.error(`❌ [${timestamp}] Error triggering next capture:`, error);
+    }
+  }, []);
+
   const processCapture = useCallback(async (captureData: CaptureData): Promise<void> => {
     if (isProcessingRef.current) {
       const timestamp = new Date().toISOString();
@@ -209,12 +220,12 @@ export default function ScreenCaptureScreen() {
 
     const startTime = Date.now();
     const timestamp = new Date().toISOString();
-    
+
     setIsProcessing(true);
     isProcessingRef.current = true;
     try {
       console.log(`🚀 [${timestamp}] Sending to server...`);
-      
+
       const response = await fetch('http://192.168.100.47:3000/analyze', {
         method: 'POST',
         headers: {
@@ -231,9 +242,9 @@ export default function ScreenCaptureScreen() {
       const result = await response.json();
       const processingTime = Date.now() - startTime;
       const responseTimestamp = new Date().toISOString();
-      
+
       console.log(`📊 [${responseTimestamp}] Analysis complete (${processingTime}ms):`, result.analysis.category, 'confidence:', result.analysis.confidence);
-      
+
       // Handle the analysis result
       if (result.analysis.harmful && result.analysis.action === 'scroll') {
         console.log(`⚠️ [${responseTimestamp}] Harmful content detected - would trigger scroll`);
@@ -252,7 +263,7 @@ export default function ScreenCaptureScreen() {
     } finally {
       setIsProcessing(false);
       isProcessingRef.current = false;
-      
+
       // CRITICAL: Continue the loop after processing
       if (captureLoopRef.current) {
         const nextTimestamp = new Date().toISOString();
@@ -263,17 +274,6 @@ export default function ScreenCaptureScreen() {
       }
     }
   }, [triggerNextCapture]);
-
-  const triggerNextCapture = useCallback(async () => {
-    const timestamp = new Date().toISOString();
-    try {
-      console.log(`🎯 [${timestamp}] Calling captureNextFrame...`);
-      await ScreenCaptureModule.captureNextFrame();
-      console.log(`✅ [${timestamp}] captureNextFrame completed`);
-    } catch (error) {
-      console.error(`❌ [${timestamp}] Error triggering next capture:`, error);
-    }
-  }, []);
 
   const sendToBackend = async () => {
     if (!lastCapture) {
@@ -298,7 +298,7 @@ export default function ScreenCaptureScreen() {
 
       const result = await response.json();
       console.log('📊 Backend response:', result);
-      
+
       Alert.alert('Backend Response', JSON.stringify(result, null, 2));
     } catch (error) {
       console.error('❌ Error sending to backend:', error);
@@ -326,30 +326,30 @@ export default function ScreenCaptureScreen() {
 
       {/* Status Cards */}
       <View style={styles.statusGrid}>
-        <StatusCard 
-          title="Status" 
-          value={captureLoop ? 'SEQUENTIAL' : 'STOPPED'} 
-          color={captureLoop ? '#4CAF50' : '#F44336'} 
+        <StatusCard
+          title="Status"
+          value={captureLoop ? 'SEQUENTIAL' : 'STOPPED'}
+          color={captureLoop ? '#4CAF50' : '#F44336'}
         />
-        <StatusCard 
-          title="Total Captures" 
-          value={stats.totalCaptures} 
-          color={Colors[colorScheme ?? 'light'].tint} 
+        <StatusCard
+          title="Total Captures"
+          value={stats.totalCaptures}
+          color={Colors[colorScheme ?? 'light'].tint}
         />
-        <StatusCard 
-          title="Interval" 
-          value={`${stats.captureInterval}ms`} 
-          color={isDark ? '#ECEDEE' : '#11181C'} 
+        <StatusCard
+          title="Interval"
+          value={`${stats.captureInterval}ms`}
+          color={isDark ? '#ECEDEE' : '#11181C'}
         />
-        <StatusCard 
-          title="Processing" 
-          value={isProcessing ? 'ANALYZING' : (captureLoop ? 'WAITING' : 'READY')} 
-          color={isProcessing ? '#FF9800' : (captureLoop ? '#2196F3' : '#4CAF50')} 
+        <StatusCard
+          title="Processing"
+          value={isProcessing ? 'ANALYZING' : (captureLoop ? 'WAITING' : 'READY')}
+          color={isProcessing ? '#FF9800' : (captureLoop ? '#2196F3' : '#4CAF50')}
         />
-        <StatusCard 
-          title="Permission" 
-          value={permissionGranted ? 'GRANTED' : 'REQUIRED'} 
-          color={permissionGranted ? '#4CAF50' : '#FF9800'} 
+        <StatusCard
+          title="Permission"
+          value={permissionGranted ? 'GRANTED' : 'REQUIRED'}
+          color={permissionGranted ? '#4CAF50' : '#FF9800'}
         />
 
       </View>
@@ -396,16 +396,16 @@ export default function ScreenCaptureScreen() {
         <Text style={[styles.sectionTitle, { color: isDark ? '#ECEDEE' : '#11181C' }]}>
           Capture Interval
         </Text>
-        
+
         <View style={styles.intervalButtons}>
           {[100, 500, 1000, 2000].map(interval => (
             <TouchableOpacity
               key={interval}
               style={[
                 styles.intervalButton,
-                { 
-                  backgroundColor: stats.captureInterval === interval 
-                    ? Colors[colorScheme ?? 'light'].tint 
+                {
+                  backgroundColor: stats.captureInterval === interval
+                    ? Colors[colorScheme ?? 'light'].tint
                     : (isDark ? '#2A2A2A' : '#F5F5F5')
                 }
               ]}
@@ -413,9 +413,9 @@ export default function ScreenCaptureScreen() {
             >
               <Text style={[
                 styles.intervalButtonText,
-                { 
-                  color: stats.captureInterval === interval 
-                    ? 'white' 
+                {
+                  color: stats.captureInterval === interval
+                    ? 'white'
                     : (isDark ? '#ECEDEE' : '#11181C')
                 }
               ]}>
@@ -432,7 +432,7 @@ export default function ScreenCaptureScreen() {
           <Text style={[styles.sectionTitle, { color: isDark ? '#ECEDEE' : '#11181C' }]}>
             Last Capture
           </Text>
-          
+
           <View style={[styles.previewCard, { backgroundColor: isDark ? '#2A2A2A' : '#F5F5F5' }]}>
             <Image
               source={{ uri: `data:image/jpeg;base64,${lastCapture.base64}` }}
@@ -447,7 +447,7 @@ export default function ScreenCaptureScreen() {
                 Time: {new Date(lastCapture.timestamp).toLocaleTimeString()}
               </Text>
             </View>
-            
+
             <TouchableOpacity
               style={[styles.button, { backgroundColor: '#2196F3', marginTop: 10 }]}
               onPress={sendToBackend}

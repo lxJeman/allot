@@ -38,4 +38,4 @@ yarn-error.*
 .vscode
 
 # misc
-docs
+rust-backend/target
