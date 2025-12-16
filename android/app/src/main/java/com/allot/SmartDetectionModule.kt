@@ -36,6 +36,9 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
     // Pre-filter pipeline components
     private val preFilterPipeline by lazy { PreFilterPipeline() }
     
+    // Local text extraction components
+    private val localTextExtractor by lazy { LocalTextExtractor() }
+    
     // Coroutine scope for async operations
     private val moduleScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -521,16 +524,24 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
                 
                 // Test 1: Hash Generation
                 try {
-                    val testBitmap = PerceptualHashGenerator.createTestBitmap(100, 100, TestPattern.SOLID)
+                    val testBitmap = PerceptualHashGenerator.createTestBitmap(100, 100, TestPattern.GRADIENT)
                     val (hash, processingTime) = PerceptualHashGenerator.generateHashWithTiming(testBitmap)
                     testBitmap.recycle()
                     
+                    val issues = mutableListOf<String>()
+                    if (hash == 0L) {
+                        issues.add("Hash generation returned 0 - indicates no visual variation")
+                    }
+                    if (processingTime > 5) {
+                        issues.add("Hash generation too slow: ${processingTime}ms > 5ms")
+                    }
+                    
                     testResults.add(mapOf<String, Any>(
                         "testName" to "Hash Generation",
-                        "passed" to true,
+                        "passed" to issues.isEmpty(),
                         "processingTimeMs" to processingTime,
                         "hash" to hash.toString(16),
-                        "issues" to emptyList<String>()
+                        "issues" to issues
                     ))
                 } catch (e: Exception) {
                     allTestsPassed = false
@@ -787,7 +798,83 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
                     ))
                 }
                 
-                // Test 8: Pre-filter Pipeline Infrastructure
+                // Test 8: Local Text Extraction
+                try {
+                    // Create test bitmap with text
+                    val testBitmap = PerceptualHashGenerator.createTestBitmap(200, 100, TestPattern.SOLID)
+                    
+                    // Extract text (should be minimal for solid color bitmap)
+                    val extractionResult = localTextExtractor.extractText(testBitmap)
+                    testBitmap.recycle()
+                    
+                    val issues = mutableListOf<String>()
+                    if (extractionResult.processingTimeMs > LocalTextExtractor.TARGET_PROCESSING_TIME_MS) {
+                        issues.add("Text extraction too slow: ${extractionResult.processingTimeMs}ms > ${LocalTextExtractor.TARGET_PROCESSING_TIME_MS}ms")
+                    }
+                    if (extractionResult.confidence < 0) {
+                        issues.add("Invalid confidence score: ${extractionResult.confidence}")
+                    }
+                    if (extractionResult.textDensity < 0) {
+                        issues.add("Invalid text density: ${extractionResult.textDensity}")
+                    }
+                    
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Local Text Extraction",
+                        "passed" to issues.isEmpty(),
+                        "processingTimeMs" to extractionResult.processingTimeMs,
+                        "confidence" to extractionResult.confidence,
+                        "textDensity" to extractionResult.textDensity,
+                        "textRegions" to extractionResult.textRegions.size,
+                        "issues" to issues
+                    ))
+                    
+                    if (issues.isNotEmpty()) allTestsPassed = false
+                    
+                } catch (e: Exception) {
+                    allTestsPassed = false
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Local Text Extraction",
+                        "passed" to false,
+                        "error" to (e.message ?: "Unknown error"),
+                        "issues" to listOf("Text extraction failed: ${e.message ?: "Unknown error"}")
+                    ))
+                }
+                
+                // Test 9: Text Density Calculation
+                try {
+                    val testBitmap = PerceptualHashGenerator.createTestBitmap(100, 100, TestPattern.CHECKERBOARD)
+                    
+                    val textDensity = localTextExtractor.calculateTextDensity(testBitmap)
+                    val hasText = localTextExtractor.isTextPresent(testBitmap)
+                    
+                    testBitmap.recycle()
+                    
+                    val issues = mutableListOf<String>()
+                    if (textDensity < 0 || textDensity > 1) {
+                        issues.add("Invalid text density range: $textDensity (should be 0-1)")
+                    }
+                    
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Text Density Calculation",
+                        "passed" to issues.isEmpty(),
+                        "textDensity" to textDensity,
+                        "hasText" to hasText,
+                        "issues" to issues
+                    ))
+                    
+                    if (issues.isNotEmpty()) allTestsPassed = false
+                    
+                } catch (e: Exception) {
+                    allTestsPassed = false
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Text Density Calculation",
+                        "passed" to false,
+                        "error" to (e.message ?: "Unknown error"),
+                        "issues" to listOf("Text density calculation failed: ${e.message ?: "Unknown error"}")
+                    ))
+                }
+                
+                // Test 10: Pre-filter Pipeline Infrastructure
                 try {
                     // Reset pipeline for clean test
                     preFilterPipeline.reset()
@@ -859,6 +946,61 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
                         "passed" to false,
                         "error" to (e.message ?: "Unknown error"),
                         "issues" to listOf("Pre-filter pipeline test failed: ${e.message ?: "Unknown error"}")
+                    ))
+                }
+                
+                // Test 11: Performance Requirements Validation
+                try {
+                    val testBitmaps = mutableListOf<Bitmap>()
+                    val timings = mutableListOf<Long>()
+                    
+                    // Create diverse test bitmaps for realistic performance testing
+                    val patterns = listOf(TestPattern.GRADIENT, TestPattern.CHECKERBOARD, TestPattern.SOLID)
+                    
+                    for (i in 0 until 10) {
+                        val pattern = patterns[i % patterns.size]
+                        val bitmap = PerceptualHashGenerator.createTestBitmap(100, 100, pattern)
+                        testBitmaps.add(bitmap)
+                        
+                        // Measure individual hash generation time
+                        val (_, processingTime) = PerceptualHashGenerator.generateHashWithTiming(bitmap)
+                        timings.add(processingTime)
+                    }
+                    
+                    // Clean up bitmaps
+                    testBitmaps.forEach { it.recycle() }
+                    
+                    val averageTimeMs = timings.average()
+                    val maxTimeMs = timings.maxOrNull() ?: 0L
+                    val meetsRequirements = averageTimeMs < 5.0 && maxTimeMs < 10L
+                    
+                    val issues = mutableListOf<String>()
+                    if (averageTimeMs >= 5.0) {
+                        issues.add("Average processing time too slow: ${String.format("%.2f", averageTimeMs)}ms >= 5ms")
+                    }
+                    if (maxTimeMs >= 10L) {
+                        issues.add("Max processing time too slow: ${maxTimeMs}ms >= 10ms")
+                    }
+                    
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Performance Requirements",
+                        "passed" to meetsRequirements,
+                        "totalBitmaps" to testBitmaps.size,
+                        "averageTimeMs" to averageTimeMs,
+                        "maxTimeMs" to maxTimeMs,
+                        "meetsRequirements" to meetsRequirements,
+                        "issues" to issues
+                    ))
+                    
+                    if (!meetsRequirements) allTestsPassed = false
+                    
+                } catch (e: Exception) {
+                    allTestsPassed = false
+                    testResults.add(mapOf<String, Any>(
+                        "testName" to "Performance Requirements",
+                        "passed" to false,
+                        "error" to (e.message ?: "Unknown error"),
+                        "issues" to listOf("Performance validation failed: ${e.message ?: "Unknown error"}")
                     ))
                 }
                 
@@ -1496,6 +1638,333 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
             Log.e(TAG, "Error clearing data: ${e.message}", e)
             promise.reject("CLEAR_ERROR", e.message)
         }
+    }
+
+    /**
+     * Extract text from image using ML Kit
+     */
+    @ReactMethod
+    fun extractText(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("extract_text")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Extract text using ML Kit
+                val extractionResult = localTextExtractor.extractText(bitmap)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putString("extractedText", extractionResult.extractedText)
+                    putDouble("confidence", (extractionResult.confidence * 100).toDouble())
+                    putDouble("textDensity", (extractionResult.textDensity * 100).toDouble())
+                    putDouble("processingTimeMs", extractionResult.processingTimeMs.toDouble())
+                    putBoolean("hasText", extractionResult.hasText())
+                    putBoolean("meetsConfidenceThreshold", extractionResult.meetsConfidenceThreshold())
+                    putBoolean("meetsPerformanceTarget", extractionResult.meetsPerformanceTarget())
+                    
+                    // Text regions
+                    val regionsArray = Arguments.createArray()
+                    extractionResult.textRegions.forEach { region ->
+                        val regionMap = Arguments.createMap().apply {
+                            putString("text", region.text)
+                            putDouble("confidence", (region.confidence * 100).toDouble())
+                            putString("textType", region.textType.name)
+                            putBoolean("isContentText", region.isContentText())
+                            putBoolean("isUIElement", region.isUIElement())
+                            putBoolean("isMetadata", region.isMetadata())
+                            putInt("area", region.getArea())
+                            
+                            // Bounding box
+                            val boundingBoxMap = Arguments.createMap().apply {
+                                putInt("left", region.boundingBox.left)
+                                putInt("top", region.boundingBox.top)
+                                putInt("right", region.boundingBox.right)
+                                putInt("bottom", region.boundingBox.bottom)
+                                putInt("width", region.boundingBox.width())
+                                putInt("height", region.boundingBox.height())
+                            }
+                            putMap("boundingBox", boundingBoxMap)
+                        }
+                        regionsArray.pushMap(regionMap)
+                    }
+                    putArray("textRegions", regionsArray)
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error extracting text: ${e.message}", e)
+                promise.reject("TEXT_EXTRACTION_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Extract text regions with detailed analysis
+     */
+    @ReactMethod
+    fun extractTextWithRegions(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("extract_text_regions")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Extract text regions
+                val textRegions = localTextExtractor.extractTextWithRegions(bitmap)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putInt("totalRegions", textRegions.size)
+                    putInt("contentTextRegions", textRegions.count { it.isContentText() })
+                    putInt("uiElementRegions", textRegions.count { it.isUIElement() })
+                    putInt("metadataRegions", textRegions.count { it.isMetadata() })
+                    
+                    // Regions array
+                    val regionsArray = Arguments.createArray()
+                    textRegions.forEach { region ->
+                        val regionMap = Arguments.createMap().apply {
+                            putString("text", region.text)
+                            putDouble("confidence", (region.confidence * 100).toDouble())
+                            putString("textType", region.textType.name)
+                            putInt("area", region.getArea())
+                            
+                            val boundingBoxMap = Arguments.createMap().apply {
+                                putInt("left", region.boundingBox.left)
+                                putInt("top", region.boundingBox.top)
+                                putInt("right", region.boundingBox.right)
+                                putInt("bottom", region.boundingBox.bottom)
+                                putInt("width", region.boundingBox.width())
+                                putInt("height", region.boundingBox.height())
+                            }
+                            putMap("boundingBox", boundingBoxMap)
+                        }
+                        regionsArray.pushMap(regionMap)
+                    }
+                    putArray("regions", regionsArray)
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error extracting text regions: ${e.message}", e)
+                promise.reject("TEXT_REGIONS_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Calculate text density for intelligent filtering
+     */
+    @ReactMethod
+    fun calculateTextDensity(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("calculate_text_density")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Calculate text density
+                val textDensity = localTextExtractor.calculateTextDensity(bitmap)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putDouble("textDensity", (textDensity * 100).toDouble())
+                    putBoolean("hasSignificantText", textDensity >= LocalTextExtractor.MIN_TEXT_DENSITY_THRESHOLD)
+                    putDouble("processingTimeMs", timer.getElapsedTime().toDouble())
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error calculating text density: ${e.message}", e)
+                promise.reject("TEXT_DENSITY_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Quick text presence detection
+     */
+    @ReactMethod
+    fun isTextPresent(base64Image: String, threshold: Double?, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("is_text_present")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                val thresholdValue = threshold?.toFloat() ?: LocalTextExtractor.MIN_TEXT_DENSITY_THRESHOLD
+                
+                // Check text presence
+                val hasText = localTextExtractor.isTextPresent(bitmap, thresholdValue)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putBoolean("hasText", hasText)
+                    putDouble("threshold", (thresholdValue * 100).toDouble())
+                    putDouble("processingTimeMs", timer.getElapsedTime().toDouble())
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error checking text presence: ${e.message}", e)
+                promise.reject("TEXT_PRESENCE_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Get text extraction performance metrics
+     */
+    @ReactMethod
+    fun getTextExtractionMetrics(promise: Promise) {
+        try {
+            val metrics = localTextExtractor.getPerformanceMetrics()
+            
+            val result = Arguments.createMap().apply {
+                putDouble("totalExtractions", metrics.totalExtractions.toDouble())
+                putDouble("averageProcessingTimeMs", metrics.averageProcessingTimeMs.toDouble())
+                putDouble("successRate", (metrics.successRate * 100).toDouble())
+                putBoolean("meetsPerformanceTarget", metrics.meetsPerformanceTarget)
+                putDouble("targetProcessingTimeMs", LocalTextExtractor.TARGET_PROCESSING_TIME_MS.toDouble())
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting text extraction metrics: ${e.message}", e)
+            promise.reject("TEXT_METRICS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Test text extraction with different content types
+     */
+    @ReactMethod
+    fun testTextExtraction(base64Image: String, expectedText: String?, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("test_text_extraction")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Extract text
+                val extractionResult = localTextExtractor.extractText(bitmap)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                // Analyze results
+                val contentTextRegions = extractionResult.textRegions.filter { it.isContentText() }
+                val uiElementRegions = extractionResult.textRegions.filter { it.isUIElement() }
+                val metadataRegions = extractionResult.textRegions.filter { it.isMetadata() }
+                
+                // Calculate accuracy if expected text provided
+                val accuracy = if (expectedText != null && expectedText.isNotBlank()) {
+                    calculateTextAccuracy(extractionResult.extractedText, expectedText)
+                } else null
+                
+                val result = Arguments.createMap().apply {
+                    putString("extractedText", extractionResult.extractedText)
+                    putDouble("confidence", (extractionResult.confidence * 100).toDouble())
+                    putDouble("textDensity", (extractionResult.textDensity * 100).toDouble())
+                    putDouble("processingTimeMs", extractionResult.processingTimeMs.toDouble())
+                    putBoolean("meetsPerformanceTarget", extractionResult.meetsPerformanceTarget())
+                    
+                    // Region analysis
+                    putInt("totalRegions", extractionResult.textRegions.size)
+                    putInt("contentTextRegions", contentTextRegions.size)
+                    putInt("uiElementRegions", uiElementRegions.size)
+                    putInt("metadataRegions", metadataRegions.size)
+                    
+                    // Classification accuracy
+                    val classificationAccuracy = if (extractionResult.textRegions.isNotEmpty()) {
+                        contentTextRegions.size.toFloat() / extractionResult.textRegions.size * 100
+                    } else 0f
+                    putDouble("classificationAccuracy", classificationAccuracy.toDouble())
+                    
+                    // Text accuracy if expected text provided
+                    accuracy?.let { putDouble("textAccuracy", (it * 100).toDouble()) }
+                    
+                    // Performance assessment
+                    val issues = mutableListOf<String>()
+                    if (extractionResult.processingTimeMs > LocalTextExtractor.TARGET_PROCESSING_TIME_MS) {
+                        issues.add("Processing time exceeded target: ${extractionResult.processingTimeMs}ms > ${LocalTextExtractor.TARGET_PROCESSING_TIME_MS}ms")
+                    }
+                    if (extractionResult.confidence < 0.8f) {
+                        issues.add("Low confidence: ${(extractionResult.confidence * 100).toInt()}%")
+                    }
+                    if (accuracy != null && accuracy < 0.95f) {
+                        issues.add("Text accuracy below target: ${(accuracy * 100).toInt()}% < 95%")
+                    }
+                    
+                    val issuesArray = Arguments.createArray()
+                    issues.forEach { issue -> issuesArray.pushString(issue) }
+                    putArray("issues", issuesArray)
+                    
+                    putBoolean("passed", issues.isEmpty())
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error testing text extraction: ${e.message}", e)
+                promise.reject("TEXT_EXTRACTION_TEST_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Clear text extraction metrics
+     */
+    @ReactMethod
+    fun clearTextExtractionMetrics(promise: Promise) {
+        try {
+            localTextExtractor.clearMetrics()
+            
+            val result = Arguments.createMap().apply {
+                putBoolean("success", true)
+                putString("message", "Text extraction metrics cleared")
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing text extraction metrics: ${e.message}", e)
+            promise.reject("CLEAR_TEXT_METRICS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Calculate text accuracy between extracted and expected text
+     */
+    private fun calculateTextAccuracy(extracted: String, expected: String): Float {
+        if (expected.isBlank()) return if (extracted.isBlank()) 1f else 0f
+        if (extracted.isBlank()) return 0f
+        
+        val extractedWords = extracted.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+        val expectedWords = expected.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+        
+        if (expectedWords.isEmpty()) return if (extractedWords.isEmpty()) 1f else 0f
+        
+        val matchingWords = extractedWords.intersect(expectedWords.toSet()).size
+        return matchingWords.toFloat() / expectedWords.size
     }
 
     /**

@@ -48,15 +48,14 @@ object PerceptualHashGenerator {
         require(!bitmap.isRecycled) { "Bitmap is recycled" }
         require(bitmap.width > 0 && bitmap.height > 0) { "Bitmap has invalid dimensions" }
         
-        val processingTime = measureTimeMillis {
+        return try {
+            val startTime = System.nanoTime()
+            val hash = generateHashInternal(bitmap)
+            val endTime = System.nanoTime()
+            val processingTime = (endTime - startTime) / 1_000_000 // Convert to milliseconds
+            
             // Update performance metrics
             totalGenerations++
-        }
-        
-        return try {
-            val hash = generateHashInternal(bitmap)
-            
-            // Update timing metrics
             totalTimeMs += processingTime
             if (processingTime > maxTimeMs) {
                 maxTimeMs = processingTime

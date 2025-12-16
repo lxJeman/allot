@@ -195,13 +195,13 @@ export default function SmartDetectionTest() {
 
       // Create test images with different patterns for motion testing
       console.log('1️⃣ Creating test images...');
-      
+
       // Fallback base64 images (simple 1x1 pixel images)
       const testImageBase64_1 = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A';
       const testImageBase64_2 = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A';
-      
+
       let testImage1, testImage2, testImage3, testImage4;
-      
+
       if (SmartDetectionModule.createTestImage) {
         testImage1 = await SmartDetectionModule.createTestImage(200, 200, '#FF0000', 'SOLID');
         testImage2 = await SmartDetectionModule.createTestImage(200, 200, '#00FF00', 'SOLID');
@@ -326,7 +326,7 @@ export default function SmartDetectionTest() {
 
       // Create a simple test image (1x1 pixel base64)
       const testImageBase64 = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A';
-      
+
       // Check if createTestImage is available, if not use fallback
       let testImage;
       if (SmartDetectionModule.createTestImage) {
@@ -394,7 +394,7 @@ export default function SmartDetectionTest() {
 
       // Create test image
       const testImageBase64 = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A';
-      
+
       let testImage;
       if (SmartDetectionModule.createTestImage) {
         testImage = await SmartDetectionModule.createTestImage(200, 200, '#FF0000', 'SOLID');
@@ -444,7 +444,7 @@ export default function SmartDetectionTest() {
       // Test 4: Force state transitions
       console.log('4️⃣ Testing state transitions...');
       const states = ['HARMFUL_DETECTED', 'SCROLLING_AWAY', 'COOLDOWN', 'SAFE_CONTENT', 'SCANNING'];
-      
+
       for (const state of states) {
         if (SmartDetectionModule.forceStateTransition) {
           await SmartDetectionModule.forceStateTransition(state, `Test transition to ${state}`);
@@ -498,7 +498,7 @@ export default function SmartDetectionTest() {
 
       // Create test images
       const testImageBase64 = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A';
-      
+
       let testImage;
       if (SmartDetectionModule.createTestImage) {
         testImage = await SmartDetectionModule.createTestImage(200, 200, '#FF0000', 'SOLID');
@@ -523,7 +523,7 @@ export default function SmartDetectionTest() {
       // Test 2: Run pipeline tests
       console.log('2️⃣ Testing pipeline execution...');
       const pipelineResults = [];
-      
+
       if (SmartDetectionModule.testPreFilterPipeline) {
         for (let i = 0; i < 10; i++) {
           const result = await SmartDetectionModule.testPreFilterPipeline(testImage.base64);
@@ -563,6 +563,121 @@ export default function SmartDetectionTest() {
     } catch (error) {
       console.error('Error in pre-filter pipeline test:', error);
       Alert.alert('Pipeline Test Error', `Failed to test pre-filter pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const testTextExtraction = async () => {
+    if (!checkModuleAvailability()) return;
+
+    setIsLoading(true);
+
+    try {
+      console.log('📝 Testing Text Extraction...');
+
+      // Create test images with different content types
+      const testImageBase64 = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A';
+
+      let testImage;
+      if (SmartDetectionModule.createTestImage) {
+        testImage = await SmartDetectionModule.createTestImage(400, 200, '#FFFFFF', 'SOLID');
+      } else {
+        testImage = { base64: testImageBase64 };
+      }
+
+      // Test 1: Basic text extraction
+      console.log('1️⃣ Testing basic text extraction..');
+      const extractionResult = await SmartDetectionModule.extractText(testImage.base64);
+      console.log('✅ Text extraction result:', extractionResult);
+
+      // Test 2: Text regions extraction
+      console.log('2️⃣ Testing text regions extraction...');
+      const regionsResult = await SmartDetectionModule.extractTextWithRegions(testImage.base64);
+      console.log('✅ Text regions result:', regionsResult);
+
+      // Test 3: Text density calculation
+      console.log('3️⃣ Testing text density calculation...');
+      const densityResult = await SmartDetectionModule.calculateTextDensity(testImage.base64);
+      console.log('✅ Text density result:', densityResult);
+
+      // Test 4: Text presence detection
+      console.log('4️⃣ Testing text presence detection...');
+      const presenceResult = await SmartDetectionModule.isTextPresent(testImage.base64, 0.1);
+      console.log('✅ Text presence result:', presenceResult);
+
+      // Test 5: Text extraction with expected text (accuracy test)
+      console.log('5️⃣ Testing text extraction accuracy...');
+      const accuracyResult = await SmartDetectionModule.testTextExtraction(
+        testImage.base64,
+        'Sample text for testing' // Expected text
+      );
+      console.log('✅ Text accuracy result:', accuracyResult);
+
+      // Test 6: Get text extraction metrics
+      console.log('6️⃣ Getting text extraction metrics...');
+      const metricsResult = await SmartDetectionModule.getTextExtractionMetrics();
+      console.log('✅ Text metrics result:', metricsResult);
+
+      // Refresh all data
+      await loadInitialData();
+
+      // Prepare summary
+      const summary = {
+        basicExtraction: {
+          extractedText: extractionResult.extractedText || 'No text detected',
+          confidence: extractionResult.confidence || 0,
+          textDensity: extractionResult.textDensity || 0,
+          processingTime: extractionResult.processingTimeMs || 0,
+          textRegions: extractionResult.textRegions?.length || 0,
+          meetsPerformanceTarget: extractionResult.meetsPerformanceTarget || false
+        },
+        regions: {
+          totalRegions: regionsResult.totalRegions || 0,
+          contentTextRegions: regionsResult.contentTextRegions || 0,
+          uiElementRegions: regionsResult.uiElementRegions || 0,
+          metadataRegions: regionsResult.metadataRegions || 0
+        },
+        density: {
+          textDensity: densityResult.textDensity || 0,
+          hasSignificantText: densityResult.hasSignificantText || false,
+          processingTime: densityResult.processingTimeMs || 0
+        },
+        presence: {
+          hasText: presenceResult.hasText || false,
+          threshold: presenceResult.threshold || 0,
+          processingTime: presenceResult.processingTimeMs || 0
+        },
+        accuracy: {
+          passed: accuracyResult.passed || false,
+          textAccuracy: accuracyResult.textAccuracy || 0,
+          classificationAccuracy: accuracyResult.classificationAccuracy || 0,
+          issues: accuracyResult.issues || []
+        },
+        metrics: {
+          totalExtractions: metricsResult.totalExtractions || 0,
+          averageProcessingTime: metricsResult.averageProcessingTimeMs || 0,
+          successRate: metricsResult.successRate || 0,
+          meetsPerformanceTarget: metricsResult.meetsPerformanceTarget || false
+        }
+      };
+
+      Alert.alert(
+        'Text Extraction Test Complete',
+        `Extracted Text: "${summary.basicExtraction.extractedText}"\n` +
+        `Confidence: ${(summary.basicExtraction.confidence * 100).toFixed(1)}%\n` +
+        `Text Density: ${(summary.basicExtraction.textDensity * 100).toFixed(1)}%\n` +
+        `Processing Time: ${summary.basicExtraction.processingTime.toFixed(1)}ms\n` +
+        `Text Regions: ${summary.basicExtraction.textRegions}\n` +
+        `Performance Target: ${summary.basicExtraction.meetsPerformanceTarget ? 'Met' : 'Not Met'}\n` +
+        `Total Extractions: ${summary.metrics.totalExtractions}\n` +
+        `Success Rate: ${(summary.metrics.successRate * 100).toFixed(1)}%`,
+        [{ text: 'OK' }]
+      );
+
+    } catch (error) {
+      console.error('Error in text extraction test:', error);
+      Alert.alert('Text Extraction Test Error', `Failed to test text extraction: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -651,6 +766,16 @@ export default function SmartDetectionTest() {
         >
           <Text style={styles.buttonText}>
             {isLoading ? '🔍 Testing Pipeline...' : '🔍 Test Pre-filter Pipeline'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.textExtractionButton]}
+          onPress={testTextExtraction}
+          disabled={isLoading || !SmartDetectionModule}
+        >
+          <Text style={styles.buttonText}>
+            {isLoading ? '📝 Testing Text Extraction...' : '📝 Test Text Extraction'}
           </Text>
         </TouchableOpacity>
 
@@ -929,7 +1054,8 @@ export default function SmartDetectionTest() {
         <Text style={styles.instruction}>3. Test Frame Analysis - Hash generation and similarity detection</Text>
         <Text style={styles.instruction}>4. Test State Machine - Content state machine and decision logic</Text>
         <Text style={styles.instruction}>5. Test Pre-filter Pipeline - Multi-stage filtering system testing</Text>
-        <Text style={styles.instruction}>6. Clear All Data - Reset all buffers and statistics</Text>
+        <Text style={styles.instruction}>6. Test Text Extraction - Local ML Kit text recognition and analysis</Text>
+        <Text style={styles.instruction}>7. Clear All Data - Reset all buffers and statistics</Text>
       </View>
     </ScrollView>
   );
@@ -1005,6 +1131,9 @@ const styles = StyleSheet.create({
   },
   pipelineButton: {
     backgroundColor: '#AF52DE',
+  },
+  textExtractionButton: {
+    backgroundColor: '#32D74B',
   },
   clearButton: {
     backgroundColor: '#FF3B30',
