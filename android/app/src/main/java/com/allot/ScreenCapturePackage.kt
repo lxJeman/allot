@@ -9,7 +9,8 @@ class ScreenCapturePackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         return listOf(
             ScreenCaptureModule(reactContext),
-            SmartDetectionModule(reactContext)
+            SmartDetectionModule(reactContext),
+            LocalTextExtractionModule(reactContext)
         )
     }
 

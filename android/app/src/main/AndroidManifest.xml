@@ -58,5 +58,12 @@
       android:enabled="true"
       android:exported="false"
       android:foregroundServiceType="mediaProjection" />
+      
+    <!-- Local Text Extraction Service -->
+    <service
+      android:name=".LocalTextExtractionService"
+      android:enabled="true"
+      android:exported="false"
+      android:foregroundServiceType="mediaProjection" />
   </application>
 </manifest>

@@ -614,8 +614,64 @@ export default function SmartDetectionTest() {
       );
       console.log('✅ Text accuracy result:', accuracyResult);
 
-      // Test 6: Get text extraction metrics
-      console.log('6️⃣ Getting text extraction metrics...');
+      // Test 6: Regional text density analysis
+      console.log('6️⃣ Testing regional text density...');
+      let regionalDensityResult = null;
+      if (SmartDetectionModule.calculateRegionalTextDensity) {
+        regionalDensityResult = await SmartDetectionModule.calculateRegionalTextDensity(testImage.base64);
+        console.log('✅ Regional density result:', regionalDensityResult);
+      }
+
+      // Test 7: Text quality analysis
+      console.log('7️⃣ Testing text quality analysis...');
+      let qualityResult = null;
+      if (SmartDetectionModule.calculateTextQuality) {
+        qualityResult = await SmartDetectionModule.calculateTextQuality(testImage.base64);
+        console.log('✅ Text quality result:', qualityResult);
+      }
+
+      // Test 8: Meaningful content filtering
+      console.log('8️⃣ Testing meaningful content filtering...');
+      let filteredResult = null;
+      if (SmartDetectionModule.filterMeaningfulContent) {
+        filteredResult = await SmartDetectionModule.filterMeaningfulContent(testImage.base64);
+        console.log('✅ Filtered content result:', filteredResult);
+      }
+
+      // Test 9: Fast text presence detection
+      console.log('9️⃣ Testing fast text presence detection...');
+      let fastPresenceResult = null;
+      if (SmartDetectionModule.testFastTextPresence) {
+        fastPresenceResult = await SmartDetectionModule.testFastTextPresence(testImage.base64, 0.1);
+        console.log('✅ Fast presence result:', fastPresenceResult);
+      }
+
+      // Test 10: Text extraction cache statistics
+      console.log('🔟 Getting cache statistics...');
+      let cacheStatsResult = null;
+      if (SmartDetectionModule.getTextExtractionCacheStats) {
+        cacheStatsResult = await SmartDetectionModule.getTextExtractionCacheStats();
+        console.log('✅ Cache stats result:', cacheStatsResult);
+      }
+
+      // Test 11: Text extraction with validation and fallback
+      console.log('1️⃣1️⃣ Testing text extraction with validation...');
+      let validationResult = null;
+      if (SmartDetectionModule.testTextExtractionWithValidation) {
+        validationResult = await SmartDetectionModule.testTextExtractionWithValidation(testImage.base64);
+        console.log('✅ Validation result:', validationResult);
+      }
+
+      // Test 12: A/B testing statistics
+      console.log('1️⃣2️⃣ Getting A/B testing statistics...');
+      let abTestingResult = null;
+      if (SmartDetectionModule.getABTestingStats) {
+        abTestingResult = await SmartDetectionModule.getABTestingStats();
+        console.log('✅ A/B testing result:', abTestingResult);
+      }
+
+      // Test 13: Get text extraction metrics
+      console.log('1️⃣3️⃣ Getting text extraction metrics...');
       const metricsResult = await SmartDetectionModule.getTextExtractionMetrics();
       console.log('✅ Text metrics result:', metricsResult);
 
@@ -654,6 +710,78 @@ export default function SmartDetectionTest() {
           classificationAccuracy: accuracyResult.classificationAccuracy || 0,
           issues: accuracyResult.issues || []
         },
+        regionalDensity: regionalDensityResult ? {
+          averageDensity: regionalDensityResult.averageDensity || 0,
+          maxDensity: regionalDensityResult.maxDensity || 0,
+          coverage: regionalDensityResult.coverage || 0,
+          significantRegions: regionalDensityResult.significantRegions || 0,
+          totalRegions: regionalDensityResult.totalRegions || 0,
+          hasSignificantText: regionalDensityResult.hasSignificantText || false,
+          isWellDistributed: regionalDensityResult.isWellDistributed || false
+        } : null,
+        quality: qualityResult ? {
+          clarityScore: qualityResult.clarityScore || 0,
+          completenessScore: qualityResult.completenessScore || 0,
+          relevanceScore: qualityResult.relevanceScore || 0,
+          overallScore: qualityResult.overallScore || 0,
+          meetsQualityThreshold: qualityResult.meetsQualityThreshold || false,
+          isHighQuality: qualityResult.isHighQuality || false,
+          qualityLevel: qualityResult.qualityLevel || 'UNKNOWN',
+          processingTime: qualityResult.processingTimeMs || 0
+        } : null,
+        filteredContent: filteredResult ? {
+          contentText: filteredResult.contentText || 'No meaningful content',
+          filterEfficiency: filteredResult.filterEfficiency || 0,
+          contentCoverage: filteredResult.contentCoverage || 0,
+          qualityImprovement: filteredResult.qualityImprovement || 0,
+          hasSignificantContent: filteredResult.hasSignificantContent || false,
+          meaningfulRegionsCount: filteredResult.meaningfulRegionsCount || 0,
+          filteredOutCount: filteredResult.filteredOutCount || 0,
+          contentRegionCount: filteredResult.contentRegionCount || 0
+        } : null,
+        fastPresence: fastPresenceResult ? {
+          fastResult: fastPresenceResult.fastResult || false,
+          regularResult: fastPresenceResult.regularResult || false,
+          fastProcessingTime: fastPresenceResult.fastProcessingTimeMs || 0,
+          regularProcessingTime: fastPresenceResult.regularProcessingTimeMs || 0,
+          speedImprovement: fastPresenceResult.speedImprovement || 1,
+          resultsMatch: fastPresenceResult.resultsMatch || false,
+          threshold: fastPresenceResult.threshold || 0
+        } : null,
+        cacheStats: cacheStatsResult ? {
+          size: cacheStatsResult.size || 0,
+          maxSize: cacheStatsResult.maxSize || 0,
+          hits: cacheStatsResult.hits || 0,
+          misses: cacheStatsResult.misses || 0,
+          hitRate: cacheStatsResult.hitRate || 0,
+          memoryUsageKB: cacheStatsResult.memoryUsageKB || 0,
+          isEffective: cacheStatsResult.isEffective || false
+        } : null,
+        validation: validationResult ? {
+          extractedText: validationResult.extractedText || 'No text',
+          confidence: validationResult.confidence || 0,
+          validationPassed: validationResult.validationPassed || false,
+          validationScore: validationResult.validationScore || 0,
+          fallbackUsed: validationResult.fallbackUsed || false,
+          fallbackStrategy: validationResult.fallbackStrategy || 'NONE',
+          isHighQuality: validationResult.isHighQuality || false,
+          requiresFallback: validationResult.requiresFallback || false,
+          processingTime: validationResult.processingTimeMs || 0
+        } : null,
+        abTesting: abTestingResult ? {
+          isEnabled: abTestingResult.isEnabled || false,
+          currentTestGroup: abTestingResult.currentTestGroup || 'NONE',
+          totalResults: abTestingResult.totalResults || 0,
+          controlResults: abTestingResult.controlResults || 0,
+          treatmentResults: abTestingResult.treatmentResults || 0,
+          controlAvgConfidence: abTestingResult.controlAvgConfidence || 0,
+          treatmentAvgConfidence: abTestingResult.treatmentAvgConfidence || 0,
+          controlSuccessRate: abTestingResult.controlSuccessRate || 0,
+          treatmentSuccessRate: abTestingResult.treatmentSuccessRate || 0,
+          confidenceImprovement: abTestingResult.confidenceImprovement || 0,
+          performanceImprovement: abTestingResult.performanceImprovement || 0,
+          successRateImprovement: abTestingResult.successRateImprovement || 0
+        } : null,
         metrics: {
           totalExtractions: metricsResult.totalExtractions || 0,
           averageProcessingTime: metricsResult.averageProcessingTimeMs || 0,
@@ -662,16 +790,91 @@ export default function SmartDetectionTest() {
         }
       };
 
-      Alert.alert(
-        'Text Extraction Test Complete',
-        `Extracted Text: "${summary.basicExtraction.extractedText}"\n` +
+      // Create comprehensive alert message
+      let alertMessage = `Extracted Text: "${summary.basicExtraction.extractedText}"\n` +
         `Confidence: ${(summary.basicExtraction.confidence * 100).toFixed(1)}%\n` +
         `Text Density: ${(summary.basicExtraction.textDensity * 100).toFixed(1)}%\n` +
         `Processing Time: ${summary.basicExtraction.processingTime.toFixed(1)}ms\n` +
         `Text Regions: ${summary.basicExtraction.textRegions}\n` +
-        `Performance Target: ${summary.basicExtraction.meetsPerformanceTarget ? 'Met' : 'Not Met'}\n` +
+        `Performance Target: ${summary.basicExtraction.meetsPerformanceTarget ? 'Met' : 'Not Met'}\n`;
+
+      // Add quality analysis if available
+      if (summary.quality) {
+        alertMessage += `\n📊 QUALITY ANALYSIS:\n` +
+          `Overall Score: ${summary.quality.overallScore.toFixed(1)}% (${summary.quality.qualityLevel})\n` +
+          `Clarity: ${summary.quality.clarityScore.toFixed(1)}%\n` +
+          `Completeness: ${summary.quality.completenessScore.toFixed(1)}%\n` +
+          `Relevance: ${summary.quality.relevanceScore.toFixed(1)}%\n` +
+          `High Quality: ${summary.quality.isHighQuality ? 'Yes' : 'No'}\n`;
+      }
+
+      // Add regional density if available
+      if (summary.regionalDensity) {
+        alertMessage += `\n🗺️ REGIONAL ANALYSIS:\n` +
+          `Coverage: ${summary.regionalDensity.coverage.toFixed(1)}%\n` +
+          `Significant Regions: ${summary.regionalDensity.significantRegions}/${summary.regionalDensity.totalRegions}\n` +
+          `Well Distributed: ${summary.regionalDensity.isWellDistributed ? 'Yes' : 'No'}\n`;
+      }
+
+      // Add filtered content if available
+      if (summary.filteredContent) {
+        alertMessage += `\n🔍 CONTENT FILTERING:\n` +
+          `Meaningful Content: "${summary.filteredContent.contentText.substring(0, 50)}${summary.filteredContent.contentText.length > 50 ? '...' : ''}"\n` +
+          `Filter Efficiency: ${summary.filteredContent.filterEfficiency.toFixed(1)}%\n` +
+          `Content Coverage: ${summary.filteredContent.contentCoverage.toFixed(1)}%\n` +
+          `Quality Improvement: ${summary.filteredContent.qualityImprovement.toFixed(1)}%\n` +
+          `Meaningful Regions: ${summary.filteredContent.meaningfulRegionsCount}\n`;
+      }
+
+      // Add performance optimizations if available
+      if (summary.fastPresence) {
+        alertMessage += `\n⚡ PERFORMANCE OPTIMIZATIONS:\n` +
+          `Fast Detection: ${summary.fastPresence.fastResult ? 'Text Found' : 'No Text'}\n` +
+          `Speed Improvement: ${summary.fastPresence.speedImprovement.toFixed(1)}x faster\n` +
+          `Fast Time: ${summary.fastPresence.fastProcessingTime.toFixed(1)}ms\n` +
+          `Regular Time: ${summary.fastPresence.regularProcessingTime.toFixed(1)}ms\n` +
+          `Results Match: ${summary.fastPresence.resultsMatch ? 'Yes' : 'No'}\n`;
+      }
+
+      // Add cache statistics if available
+      if (summary.cacheStats) {
+        alertMessage += `\n💾 CACHE PERFORMANCE:\n` +
+          `Cache Size: ${summary.cacheStats.size}/${summary.cacheStats.maxSize}\n` +
+          `Hit Rate: ${summary.cacheStats.hitRate.toFixed(1)}%\n` +
+          `Hits: ${summary.cacheStats.hits}, Misses: ${summary.cacheStats.misses}\n` +
+          `Memory Usage: ${summary.cacheStats.memoryUsageKB}KB\n` +
+          `Effective: ${summary.cacheStats.isEffective ? 'Yes' : 'No'}\n`;
+      }
+
+      // Add validation results if available
+      if (summary.validation) {
+        alertMessage += `\n🛡️ VALIDATION & FALLBACK:\n` +
+          `Validation Passed: ${summary.validation.validationPassed ? 'Yes' : 'No'}\n` +
+          `Validation Score: ${summary.validation.validationScore.toFixed(1)}%\n` +
+          `Fallback Used: ${summary.validation.fallbackUsed ? 'Yes' : 'No'}\n` +
+          `Fallback Strategy: ${summary.validation.fallbackStrategy}\n` +
+          `High Quality: ${summary.validation.isHighQuality ? 'Yes' : 'No'}\n`;
+      }
+
+      // Add A/B testing results if available
+      if (summary.abTesting && summary.abTesting.isEnabled) {
+        alertMessage += `\n🧪 A/B TESTING:\n` +
+          `Test Group: ${summary.abTesting.currentTestGroup}\n` +
+          `Total Results: ${summary.abTesting.totalResults}\n` +
+          `Control vs Treatment: ${summary.abTesting.controlResults} vs ${summary.abTesting.treatmentResults}\n` +
+          `Confidence Improvement: ${summary.abTesting.confidenceImprovement.toFixed(1)}%\n` +
+          `Success Rate Improvement: ${summary.abTesting.successRateImprovement.toFixed(1)}%\n`;
+      }
+
+      // Add metrics
+      alertMessage += `\n📈 METRICS:\n` +
         `Total Extractions: ${summary.metrics.totalExtractions}\n` +
-        `Success Rate: ${(summary.metrics.successRate * 100).toFixed(1)}%`,
+        `Success Rate: ${(summary.metrics.successRate * 100).toFixed(1)}%\n` +
+        `Avg Processing: ${summary.metrics.averageProcessingTime.toFixed(1)}ms`;
+
+      Alert.alert(
+        'Enhanced Text Extraction Test Complete',
+        alertMessage,
         [{ text: 'OK' }]
       );
 

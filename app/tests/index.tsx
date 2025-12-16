@@ -41,6 +41,15 @@ const testModules: TestModule[] = [
     category: 'detection',
   },
   {
+    id: 'local-text-extraction',
+    title: 'Local Text Extraction',
+    description: 'Real-time screen capture with on-device ML Kit text extraction (faster & private)',
+    route: '/tests/local-text-extraction',
+    icon: '🔍',
+    status: 'available',
+    category: 'detection',
+  },
+  {
     id: 'performance',
     title: 'Performance Benchmarks',
     description: 'Comprehensive performance testing and optimization validation',

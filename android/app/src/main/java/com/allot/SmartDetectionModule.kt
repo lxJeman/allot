@@ -1853,6 +1853,430 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
     }
     
     /**
+     * Calculate regional text density for intelligent filtering
+     */
+    @ReactMethod
+    fun calculateRegionalTextDensity(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("regional_text_density")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Calculate regional density
+                val regionalDensity = localTextExtractor.calculateRegionalTextDensity(bitmap)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putDouble("averageDensity", (regionalDensity.averageDensity * 100).toDouble())
+                    putDouble("maxDensity", (regionalDensity.maxDensity * 100).toDouble())
+                    putDouble("coverage", (regionalDensity.coverage * 100).toDouble())
+                    putInt("significantRegions", regionalDensity.significantRegions)
+                    putInt("totalRegions", regionalDensity.totalRegions)
+                    putBoolean("hasSignificantText", regionalDensity.hasSignificantText())
+                    putBoolean("isWellDistributed", regionalDensity.isWellDistributed())
+                    putDouble("processingTimeMs", timer.getElapsedTime().toDouble())
+                    
+                    // Region densities map
+                    val regionDensitiesMap = Arguments.createMap()
+                    regionalDensity.regionDensities.forEach { (position, density) ->
+                        regionDensitiesMap.putDouble(position.toString(), (density * 100).toDouble())
+                    }
+                    putMap("regionDensities", regionDensitiesMap)
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error calculating regional text density: ${e.message}", e)
+                promise.reject("REGIONAL_TEXT_DENSITY_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Calculate comprehensive text quality score
+     */
+    @ReactMethod
+    fun calculateTextQuality(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("text_quality_analysis")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Calculate quality score
+                val qualityScore = localTextExtractor.calculateTextQuality(bitmap)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putDouble("clarityScore", (qualityScore.clarityScore * 100).toDouble())
+                    putDouble("completenessScore", (qualityScore.completenessScore * 100).toDouble())
+                    putDouble("relevanceScore", (qualityScore.relevanceScore * 100).toDouble())
+                    putDouble("overallScore", (qualityScore.overallScore * 100).toDouble())
+                    putBoolean("meetsQualityThreshold", qualityScore.meetsQualityThreshold)
+                    putBoolean("isHighQuality", qualityScore.isHighQuality)
+                    putString("qualityLevel", qualityScore.getQualityLevel().name)
+                    putDouble("processingTimeMs", qualityScore.processingTimeMs.toDouble())
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error calculating text quality: ${e.message}", e)
+                promise.reject("TEXT_QUALITY_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Filter text regions to focus on meaningful content
+     */
+    @ReactMethod
+    fun filterMeaningfulContent(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("filter_meaningful_content")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Extract text first
+                val extractionResult = localTextExtractor.extractText(bitmap)
+                
+                // Filter meaningful content
+                val filteredResult = localTextExtractor.filterMeaningfulContent(extractionResult.textRegions)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putString("contentText", filteredResult.contentText)
+                    putDouble("filterEfficiency", (filteredResult.filterEfficiency * 100).toDouble())
+                    putDouble("contentCoverage", (filteredResult.contentCoverage * 100).toDouble())
+                    putDouble("qualityImprovement", (filteredResult.qualityImprovement * 100).toDouble())
+                    putBoolean("hasSignificantContent", filteredResult.hasSignificantContent())
+                    putInt("meaningfulRegionsCount", filteredResult.meaningfulRegions.size)
+                    putInt("filteredOutCount", filteredResult.getTotalFilteredCount())
+                    putInt("contentRegionCount", filteredResult.getContentRegionCount())
+                    putDouble("processingTimeMs", timer.getElapsedTime().toDouble())
+                    
+                    // Meaningful regions
+                    val meaningfulArray = Arguments.createArray()
+                    filteredResult.meaningfulRegions.forEach { region ->
+                        val regionMap = Arguments.createMap().apply {
+                            putString("text", region.text)
+                            putDouble("confidence", (region.confidence * 100).toDouble())
+                            putString("textType", region.textType.name)
+                            putInt("area", region.getArea())
+                            
+                            val boundingBoxMap = Arguments.createMap().apply {
+                                putInt("left", region.boundingBox.left)
+                                putInt("top", region.boundingBox.top)
+                                putInt("right", region.boundingBox.right)
+                                putInt("bottom", region.boundingBox.bottom)
+                            }
+                            putMap("boundingBox", boundingBoxMap)
+                        }
+                        meaningfulArray.pushMap(regionMap)
+                    }
+                    putArray("meaningfulRegions", meaningfulArray)
+                    
+                    // Filtered out regions summary
+                    val filteredOutArray = Arguments.createArray()
+                    filteredResult.filteredOutRegions.take(10).forEach { region -> // Limit to first 10 for performance
+                        val regionMap = Arguments.createMap().apply {
+                            putString("text", region.text)
+                            putString("textType", region.textType.name)
+                            putString("reason", "Filtered as non-meaningful content")
+                        }
+                        filteredOutArray.pushMap(regionMap)
+                    }
+                    putArray("filteredOutSample", filteredOutArray)
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error filtering meaningful content: ${e.message}", e)
+                promise.reject("FILTER_MEANINGFUL_CONTENT_ERROR", e.message)
+            }
+        }
+    }
+
+    /**
+     * Get text extraction cache statistics
+     */
+    @ReactMethod
+    fun getTextExtractionCacheStats(promise: Promise) {
+        try {
+            val cacheStats = localTextExtractor.getCacheStats()
+            
+            val result = Arguments.createMap().apply {
+                putInt("size", cacheStats.size)
+                putInt("maxSize", cacheStats.maxSize)
+                putDouble("hits", cacheStats.hits.toDouble())
+                putDouble("misses", cacheStats.misses.toDouble())
+                putDouble("hitRate", (cacheStats.hitRate * 100).toDouble())
+                putInt("memoryUsageKB", cacheStats.memoryUsageKB)
+                putBoolean("isEffective", cacheStats.hitRate > 0.2f)
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting cache stats: ${e.message}", e)
+            promise.reject("CACHE_STATS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Test fast text presence detection
+     */
+    @ReactMethod
+    fun testFastTextPresence(base64Image: String, threshold: Double?, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("fast_text_presence")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                val thresholdValue = threshold?.toFloat() ?: LocalTextExtractor.MIN_TEXT_DENSITY_THRESHOLD
+                
+                // Test both fast and regular detection for comparison
+                val startTime = System.currentTimeMillis()
+                val fastResult = localTextExtractor.isTextPresentFast(bitmap, thresholdValue)
+                val fastTime = System.currentTimeMillis() - startTime
+                
+                val regularStartTime = System.currentTimeMillis()
+                val regularResult = localTextExtractor.isTextPresent(bitmap, thresholdValue)
+                val regularTime = System.currentTimeMillis() - regularStartTime
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putBoolean("fastResult", fastResult)
+                    putBoolean("regularResult", regularResult)
+                    putDouble("fastProcessingTimeMs", fastTime.toDouble())
+                    putDouble("regularProcessingTimeMs", regularTime.toDouble())
+                    putDouble("speedImprovement", if (regularTime > 0) (regularTime.toDouble() / fastTime.toDouble()) else 1.0)
+                    putBoolean("resultsMatch", fastResult == regularResult)
+                    putDouble("threshold", (thresholdValue * 100).toDouble())
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error testing fast text presence: ${e.message}", e)
+                promise.reject("FAST_TEXT_PRESENCE_ERROR", e.message)
+            }
+        }
+    }
+    
+    /**
+     * Add text presence filter stage to pipeline
+     */
+    @ReactMethod
+    fun addTextPresenceFilterStage(threshold: Double, promise: Promise) {
+        try {
+            val textStage = TextPresenceFilterStage(
+                name = "TextPresenceFilter",
+                priority = 3,
+                textExtractor = localTextExtractor,
+                textThreshold = threshold.toFloat(),
+                enableROIOptimization = true
+            )
+            
+            preFilterPipeline.addFilterStage(textStage)
+            
+            val result = Arguments.createMap().apply {
+                putString("stageName", "TextPresenceFilter")
+                putInt("priority", 3)
+                putDouble("threshold", threshold)
+                putBoolean("roiOptimized", true)
+                putBoolean("success", true)
+                putArray("activeStages", Arguments.createArray().apply {
+                    preFilterPipeline.getActiveStages().forEach { pushString(it) }
+                })
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding text presence filter stage: ${e.message}", e)
+            promise.reject("ADD_TEXT_PRESENCE_FILTER_ERROR", e.message)
+        }
+    }
+
+    /**
+     * Get A/B testing statistics for text extraction
+     */
+    @ReactMethod
+    fun getABTestingStats(promise: Promise) {
+        try {
+            val abStats = localTextExtractor.abTestingFramework.getABTestingStats()
+            
+            val result = Arguments.createMap().apply {
+                putBoolean("isEnabled", abStats.isEnabled)
+                putString("currentTestGroup", abStats.currentTestGroup.name)
+                putInt("totalResults", abStats.totalResults)
+                putInt("controlResults", abStats.controlResults)
+                putInt("treatmentResults", abStats.treatmentResults)
+                putDouble("controlAvgConfidence", (abStats.controlAvgConfidence * 100).toDouble())
+                putDouble("treatmentAvgConfidence", (abStats.treatmentAvgConfidence * 100).toDouble())
+                putDouble("controlAvgProcessingTime", abStats.controlAvgProcessingTime.toDouble())
+                putDouble("treatmentAvgProcessingTime", abStats.treatmentAvgProcessingTime.toDouble())
+                putDouble("controlSuccessRate", (abStats.controlSuccessRate * 100).toDouble())
+                putDouble("treatmentSuccessRate", (abStats.treatmentSuccessRate * 100).toDouble())
+                putDouble("confidenceImprovement", (abStats.getConfidenceImprovement() * 100).toDouble())
+                putDouble("performanceImprovement", abStats.getPerformanceImprovement().toDouble())
+                putDouble("successRateImprovement", (abStats.getSuccessRateImprovement() * 100).toDouble())
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting A/B testing stats: ${e.message}", e)
+            promise.reject("AB_TESTING_STATS_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Enable A/B testing for text extraction
+     */
+    @ReactMethod
+    fun enableABTesting(testGroup: String, promise: Promise) {
+        try {
+            val group = when (testGroup.uppercase()) {
+                "CONTROL" -> ABTestGroup.CONTROL
+                "TREATMENT" -> ABTestGroup.TREATMENT
+                else -> {
+                    promise.reject("INVALID_TEST_GROUP", "Invalid test group: $testGroup")
+                    return
+                }
+            }
+            
+            localTextExtractor.abTestingFramework.enableABTesting(group)
+            
+            val result = Arguments.createMap().apply {
+                putBoolean("success", true)
+                putString("testGroup", group.name)
+                putString("message", "A/B testing enabled for group: ${group.name}")
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enabling A/B testing: ${e.message}", e)
+            promise.reject("ENABLE_AB_TESTING_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Disable A/B testing
+     */
+    @ReactMethod
+    fun disableABTesting(promise: Promise) {
+        try {
+            localTextExtractor.abTestingFramework.disableABTesting()
+            
+            val result = Arguments.createMap().apply {
+                putBoolean("success", true)
+                putString("message", "A/B testing disabled")
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disabling A/B testing: ${e.message}", e)
+            promise.reject("DISABLE_AB_TESTING_ERROR", e.message)
+        }
+    }
+    
+    /**
+     * Test text extraction with validation and fallback
+     */
+    @ReactMethod
+    fun testTextExtractionWithValidation(base64Image: String, promise: Promise) {
+        moduleScope.launch {
+            val timer = performanceMonitor.startOperation("test_text_extraction_validation")
+            
+            try {
+                val bitmap = base64ToBitmap(base64Image)
+                
+                // Extract text with full validation and fallback system
+                val extractionResult = localTextExtractor.extractText(bitmap)
+                
+                bitmap.recycle()
+                timer.complete()
+                
+                val result = Arguments.createMap().apply {
+                    putString("extractedText", extractionResult.extractedText)
+                    putDouble("confidence", (extractionResult.confidence * 100).toDouble())
+                    putDouble("textDensity", (extractionResult.textDensity * 100).toDouble())
+                    putDouble("processingTimeMs", extractionResult.processingTimeMs.toDouble())
+                    putInt("textRegions", extractionResult.textRegions.size)
+                    putBoolean("meetsPerformanceTarget", extractionResult.meetsPerformanceTarget())
+                    putBoolean("usedCache", extractionResult.usedCache)
+                    putBoolean("roiDetected", extractionResult.roiDetected)
+                    
+                    // Validation results
+                    extractionResult.validationPassed?.let { putBoolean("validationPassed", it) }
+                    extractionResult.validationScore?.let { putDouble("validationScore", (it * 100).toDouble()) }
+                    extractionResult.fallbackUsed?.let { putBoolean("fallbackUsed", it) }
+                    extractionResult.fallbackStrategy?.let { putString("fallbackStrategy", it.name) }
+                    
+                    putBoolean("isHighQuality", extractionResult.isHighQuality())
+                    putBoolean("requiresFallback", extractionResult.requiresFallback())
+                }
+                
+                promise.resolve(result)
+                
+            } catch (e: Exception) {
+                timer.fail(e.message)
+                Log.e(TAG, "Error testing text extraction with validation: ${e.message}", e)
+                promise.reject("TEXT_EXTRACTION_VALIDATION_ERROR", e.message)
+            }
+        }
+    }
+
+    /**
+     * Get validation system status
+     */
+    @ReactMethod
+    fun getValidationSystemStatus(promise: Promise) {
+        try {
+            val status = localTextExtractor.getValidationSystemStatus()
+            
+            val result = Arguments.createMap().apply {
+                putBoolean("validatorEnabled", status.validatorEnabled)
+                putBoolean("fallbackManagerEnabled", status.fallbackManagerEnabled)
+                putBoolean("abTestingEnabled", status.abTestingEnabled)
+                putDouble("validationThreshold", (status.validationThreshold * 100).toDouble())
+                
+                val strategiesArray = Arguments.createArray()
+                status.supportedFallbackStrategies.forEach { strategy ->
+                    strategiesArray.pushString(strategy.name)
+                }
+                putArray("supportedFallbackStrategies", strategiesArray)
+            }
+            
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting validation system status: ${e.message}", e)
+            promise.reject("VALIDATION_SYSTEM_STATUS_ERROR", e.message)
+        }
+    }
+
+    /**
      * Test text extraction with different content types
      */
     @ReactMethod
