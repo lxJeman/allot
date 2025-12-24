@@ -91,20 +91,20 @@ const LocalTextExtractionTest: React.FC = () => {
 
     try {
       setIsLoading(true);
-      
+
       // Request screen capture permission
       console.log('🎬 Requesting screen capture permission...');
       const permissionResult = await ScreenPermissionModule.requestScreenCapturePermission();
-      
+
       if (!permissionResult.granted) {
         Alert.alert('Permission Required', 'Screen capture permission is required for text extraction testing.');
         return;
       }
-      
+
       // Start screen capture
       console.log('📸 Starting screen capture...');
       await ScreenCaptureModule.startScreenCapture();
-      
+
       // Start local text extraction service if available
       if (LocalTextExtractionModule) {
         console.log('🤖 Starting local text extraction service...');
@@ -122,19 +122,19 @@ const LocalTextExtractionTest: React.FC = () => {
       } else {
         console.log('⚠️ LocalTextExtractionModule not available, using direct extraction');
       }
-      
+
       setIsCapturing(true);
-      
+
       // Start the local text extraction loop
       startTextExtractionLoop();
-      
+
       Alert.alert(
         'Local Text Extraction Started',
         `Capturing screen every ${captureInterval}ms and extracting text locally using ML Kit.\n\n` +
         `Check the terminal (Rust backend) for detailed logs and extracted text.`,
         [{ text: 'OK' }]
       );
-      
+
     } catch (error) {
       console.error('Error starting local text capture:', error);
       Alert.alert('Error', `Failed to start capture: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -146,9 +146,9 @@ const LocalTextExtractionTest: React.FC = () => {
   const stopLocalTextCapture = async () => {
     try {
       setIsLoading(true);
-      
+
       console.log('🛑 Stopping local text capture...');
-      
+
       // Stop local text extraction service if available
       if (LocalTextExtractionModule) {
         try {
@@ -158,23 +158,23 @@ const LocalTextExtractionTest: React.FC = () => {
           console.log('⚠️ Local text extraction service stop failed:', error);
         }
       }
-      
+
       // Stop screen capture
       if (ScreenCaptureModule?.stopScreenCapture) {
         await ScreenCaptureModule.stopScreenCapture();
       }
-      
+
       setIsCapturing(false);
-      
+
       // Generate final report
       await generateFinalReport();
-      
+
       Alert.alert(
         'Local Text Extraction Stopped',
         `Capture stopped. Check the final performance report below.`,
         [{ text: 'OK' }]
       );
-      
+
     } catch (error) {
       console.error('Error stopping capture:', error);
       Alert.alert('Error', `Failed to stop capture: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -201,27 +201,27 @@ const LocalTextExtractionTest: React.FC = () => {
   const performLocalTextExtraction = async () => {
     try {
       const startTime = Date.now();
-      
+
       // Capture current screen
       console.log('📸 Capturing screen for local text extraction...');
       const captureResult = await ScreenCaptureModule.captureNextFrame();
-      
+
       if (!captureResult?.base64) {
         console.log('⏭️ No screen capture available');
         return;
       }
 
       console.log(`📱 Screen captured: ${captureResult.width}x${captureResult.height}`);
-      
+
       // Extract text using our local ML system
-      const extractionMethod = enableValidation ? 
+      const extractionMethod = enableValidation ?
         SmartDetectionModule.testTextExtractionWithValidation :
         SmartDetectionModule.extractText;
-      
+
       const extractionResult = await extractionMethod(captureResult.base64);
-      
+
       const totalTime = Date.now() - startTime;
-      
+
       // Log to Rust backend (console logs are forwarded there)
       console.log('');
       console.log('🔍 ═══════════════════════════════════════');
@@ -235,7 +235,7 @@ const LocalTextExtractionTest: React.FC = () => {
       console.log(`🎯 Text Regions: ${extractionResult.textRegions || 0}`);
       console.log(`💾 Used Cache: ${extractionResult.usedCache ? 'Yes' : 'No'}`);
       console.log(`🎯 ROI Detected: ${extractionResult.roiDetected ? 'Yes' : 'No'}`);
-      
+
       if (enableValidation) {
         console.log(`✅ Validation Passed: ${extractionResult.validationPassed ? 'Yes' : 'No'}`);
         console.log(`📊 Validation Score: ${extractionResult.validationScore ? (extractionResult.validationScore * 100).toFixed(1) + '%' : 'N/A'}`);
@@ -245,7 +245,7 @@ const LocalTextExtractionTest: React.FC = () => {
         }
         console.log(`⭐ High Quality: ${extractionResult.isHighQuality ? 'Yes' : 'No'}`);
       }
-      
+
       console.log('🔍 ═══════════════════════════════════════');
       console.log('');
 
@@ -273,7 +273,7 @@ const LocalTextExtractionTest: React.FC = () => {
         successfulExtractions: extractionResult.extractedText ? prev.successfulExtractions + 1 : prev.successfulExtractions,
         averageProcessingTime: (prev.averageProcessingTime * prev.totalCaptures + totalTime) / (prev.totalCaptures + 1),
         averageConfidence: (prev.averageConfidence * prev.totalCaptures + (extractionResult.confidence * 100)) / (prev.totalCaptures + 1),
-        cacheHitRate: extractionResult.usedCache ? 
+        cacheHitRate: extractionResult.usedCache ?
           (prev.cacheHitRate * prev.totalCaptures + 100) / (prev.totalCaptures + 1) :
           (prev.cacheHitRate * prev.totalCaptures) / (prev.totalCaptures + 1),
         totalTextExtracted: prev.totalTextExtracted + (extractionResult.extractedText?.length || 0),
@@ -300,33 +300,33 @@ const LocalTextExtractionTest: React.FC = () => {
 
     try {
       setIsLoading(true);
-      
+
       console.log('🧪 Testing single screen capture and text extraction...');
-      
+
       // Request permission if needed
       const permissionResult = await ScreenPermissionModule.requestScreenCapturePermission();
-      
+
       if (!permissionResult.granted) {
         Alert.alert('Permission Required', 'Screen capture permission is required for text extraction testing.');
         return;
       }
-      
+
       // Start capture first
       console.log('📸 Starting screen capture...');
       await ScreenCaptureModule.startScreenCapture();
-      
+
       // Wait a moment for capture to initialize
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Use LocalTextExtractionModule if available, otherwise fallback
       if (LocalTextExtractionModule) {
         console.log('🤖 Using LocalTextExtractionModule for single extraction...');
-        
+
         try {
           const result = await LocalTextExtractionModule.performSingleTextExtraction();
-          
+
           console.log('✅ Single extraction result:', result);
-          
+
           Alert.alert(
             'Single Extraction Complete',
             `Text: "${result.extractedText || 'No text detected'}"\n` +
@@ -335,7 +335,7 @@ const LocalTextExtractionTest: React.FC = () => {
             `Frame: ${result.frameWidth}x${result.frameHeight}`,
             [{ text: 'OK' }]
           );
-          
+
         } catch (error) {
           console.error('LocalTextExtractionModule failed, trying fallback:', error);
           await performFallbackSingleExtraction();
@@ -344,7 +344,7 @@ const LocalTextExtractionTest: React.FC = () => {
         console.log('⚠️ LocalTextExtractionModule not available, using fallback...');
         await performFallbackSingleExtraction();
       }
-      
+
     } catch (error) {
       console.error('Error in single extraction test:', error);
       Alert.alert('Error', `Failed to test extraction: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -358,7 +358,7 @@ const LocalTextExtractionTest: React.FC = () => {
       // Capture single frame using the updated method
       console.log('📸 Capturing frame...');
       const captureResult = await ScreenCaptureModule.captureNextFrame();
-      
+
       if (!captureResult?.base64) {
         Alert.alert('Error', 'Failed to capture screen');
         return;
@@ -369,9 +369,9 @@ const LocalTextExtractionTest: React.FC = () => {
       // Perform text extraction
       console.log('🔍 Extracting text...');
       const extractionResult = await SmartDetectionModule.extractText(captureResult.base64);
-      
+
       console.log('✅ Text extraction result:', extractionResult);
-      
+
       Alert.alert(
         'Single Extraction Complete (Fallback)',
         `Text: "${extractionResult.extractedText || 'No text detected'}"\n` +
@@ -380,7 +380,7 @@ const LocalTextExtractionTest: React.FC = () => {
         `Frame: ${captureResult.width}x${captureResult.height}`,
         [{ text: 'OK' }]
       );
-      
+
     } catch (error) {
       console.error('Fallback extraction failed:', error);
       Alert.alert('Error', `Fallback extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -407,17 +407,17 @@ const LocalTextExtractionTest: React.FC = () => {
       console.log(`📊 Average Confidence: ${captureStats.averageConfidence.toFixed(1)}%`);
       console.log(`💾 Cache Hit Rate: ${captureStats.cacheHitRate.toFixed(1)}%`);
       console.log(`📝 Total Text Extracted: ${captureStats.totalTextExtracted} characters`);
-      
+
       if (cacheStats.hits !== undefined) {
         console.log(`💾 Cache Performance: ${cacheStats.hits} hits, ${cacheStats.misses} misses`);
         console.log(`💾 Cache Efficiency: ${cacheStats.hitRate ? (cacheStats.hitRate * 100).toFixed(1) : 0}%`);
       }
-      
+
       if (metrics.totalExtractions) {
         console.log(`🔧 ML Kit Performance: ${metrics.averageProcessingTimeMs?.toFixed(1)}ms avg`);
         console.log(`🎯 ML Kit Success Rate: ${metrics.successRate ? (metrics.successRate * 100).toFixed(1) : 0}%`);
       }
-      
+
       console.log('📊 ═══════════════════════════════════════');
       console.log('');
 
@@ -431,7 +431,7 @@ const LocalTextExtractionTest: React.FC = () => {
       if (SmartDetectionModule?.clearAllData) {
         await SmartDetectionModule.clearAllData();
       }
-      
+
       setCaptureStats({
         totalCaptures: 0,
         successfulExtractions: 0,
@@ -440,9 +440,9 @@ const LocalTextExtractionTest: React.FC = () => {
         cacheHitRate: 0,
         totalTextExtracted: 0,
       });
-      
+
       setRecentExtractions([]);
-      
+
       Alert.alert('Success', 'All data cleared');
     } catch (error) {
       console.error('Error clearing data:', error);
@@ -479,7 +479,7 @@ const LocalTextExtractionTest: React.FC = () => {
       {/* Configuration */}
       <View style={styles.configCard}>
         <Text style={styles.configTitle}>Configuration</Text>
-        
+
         <View style={styles.configRow}>
           <Text style={styles.configLabel}>Enable Validation & Fallback</Text>
           <Switch
@@ -488,7 +488,7 @@ const LocalTextExtractionTest: React.FC = () => {
             disabled={isCapturing}
           />
         </View>
-        
+
         <View style={styles.configRow}>
           <Text style={styles.configLabel}>Enable Caching</Text>
           <Switch
@@ -497,7 +497,7 @@ const LocalTextExtractionTest: React.FC = () => {
             disabled={isCapturing}
           />
         </View>
-        
+
         <View style={styles.configRow}>
           <Text style={styles.configLabel}>Auto-scroll on Text Detection</Text>
           <Switch
@@ -506,7 +506,7 @@ const LocalTextExtractionTest: React.FC = () => {
             disabled={isCapturing}
           />
         </View>
-        
+
         <Text style={styles.configInfo}>
           Capture Interval: {captureInterval}ms | Validation: {enableValidation ? 'ON' : 'OFF'} | Cache: {enableCaching ? 'ON' : 'OFF'}
         </Text>

@@ -218,43 +218,100 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             // Set flag to process the next available frame
             shouldProcessNextFrame = true
             
-            // Wait for frame to be captured and return it
+            // Force a virtual display refresh by recreating it briefly
             Thread {
                 try {
+                    val startTime = System.currentTimeMillis()
+                    
+                    // Wait a moment and check if we already have a recent frame
+                    Thread.sleep(50)
+                    
+                    val existingFrame = lastCapturedFrame
+                    if (existingFrame != null && (existingFrame.timestamp >= startTime - 1000)) {
+                        // We have a recent frame, use it
+                        Log.d(TAG, "✅ Using existing recent frame: ${existingFrame.width}x${existingFrame.height}")
+                        
+                        val result = Arguments.createMap().apply {
+                            putString("base64", existingFrame.base64)
+                            putInt("width", existingFrame.width)
+                            putInt("height", existingFrame.height)
+                            putDouble("timestamp", existingFrame.timestamp.toDouble())
+                        }
+                        
+                        promise.resolve(result)
+                        return@Thread
+                    }
+                    
+                    // Force capture by briefly recreating virtual display on main thread
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            Log.d(TAG, "🔄 Forcing virtual display refresh...")
+                            
+                            // Temporarily release and recreate virtual display to force refresh
+                            virtualDisplay?.release()
+                            
+                            // Recreate virtual display immediately
+                            val windowManager = reactApplicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                            val displayMetrics = DisplayMetrics()
+                            
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val display = windowManager.defaultDisplay
+                                display.getRealMetrics(displayMetrics)
+                            } else {
+                                @Suppress("DEPRECATION") 
+                                windowManager.defaultDisplay.getMetrics(displayMetrics)
+                            }
+                            
+                            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                                "AllotScreenCapture",
+                                displayMetrics.widthPixels,
+                                displayMetrics.heightPixels,
+                                displayMetrics.densityDpi,
+                                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                                imageReader?.surface,
+                                null,
+                                null
+                            )
+                            
+                            Log.d(TAG, "✅ Virtual display refreshed")
+                            
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error refreshing virtual display: ${e.message}")
+                        }
+                    }
+                    
+                    // Wait for frame to be captured
                     var attempts = 0
-                    val maxAttempts = 20 // Wait up to 2 seconds (20 * 100ms)
+                    val maxAttempts = 30 // Wait up to 3 seconds (30 * 100ms)
                     
                     while (attempts < maxAttempts) {
                         Thread.sleep(100) // Wait 100ms
                         
                         val frame = lastCapturedFrame
-                        if (frame != null) {
-                            // Check if this is a fresh frame (captured within last 5 seconds)
-                            val frameAge = System.currentTimeMillis() - frame.timestamp
-                            if (frameAge < 5000) {
-                                Log.d(TAG, "✅ Frame captured: ${frame.width}x${frame.height}")
-                                
-                                val result = Arguments.createMap().apply {
-                                    putString("base64", frame.base64)
-                                    putInt("width", frame.width)
-                                    putInt("height", frame.height)
-                                    putDouble("timestamp", frame.timestamp.toDouble())
-                                }
-                                
-                                promise.resolve(result)
-                                return@Thread
+                        if (frame != null && frame.timestamp >= startTime) {
+                            Log.d(TAG, "✅ Fresh frame captured: ${frame.width}x${frame.height}")
+                            
+                            val result = Arguments.createMap().apply {
+                                putString("base64", frame.base64)
+                                putInt("width", frame.width)
+                                putInt("height", frame.height)
+                                putDouble("timestamp", frame.timestamp.toDouble())
                             }
+                            
+                            promise.resolve(result)
+                            return@Thread
                         }
                         
                         attempts++
                     }
                     
                     // Timeout - no frame captured
-                    Log.w(TAG, "⚠️ Timeout waiting for frame capture")
-                    promise.reject("CAPTURE_TIMEOUT", "Failed to capture frame within timeout period")
+                    Log.w(TAG, "⚠️ Timeout waiting for frame capture after ${attempts * 100}ms")
+                    Log.w(TAG, "⚠️ Last frame timestamp: ${lastCapturedFrame?.timestamp}, start time: $startTime")
+                    promise.reject("CAPTURE_TIMEOUT", "Failed to capture screen frame within timeout period")
                     
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error waiting for frame: ${e.message}", e)
+                    Log.e(TAG, "Error in frame capture thread: ${e.message}", e)
                     promise.reject("CAPTURE_ERROR", e.message)
                 }
             }.start()
