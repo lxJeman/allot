@@ -45,9 +45,10 @@ class LocalTextExtractionService : Service() {
 
     // Configuration
     private var enableValidation = true
-    private var enableCaching = true
+    private var enableCaching = false // Disable caching by default to prevent eco mode
     private var enableROIOptimization = true
     private var logToRustBackend = true
+    private var forceNoCaching = true // Force disable all caching to prevent stopping
 
     // Statistics
     private var totalCaptures = 0L
@@ -127,10 +128,16 @@ class LocalTextExtractionService : Service() {
 
     private fun parseConfiguration(intent: Intent) {
         enableValidation = intent.getBooleanExtra("enableValidation", true)
-        enableCaching = intent.getBooleanExtra("enableCaching", true)
+        enableCaching = intent.getBooleanExtra("enableCaching", false) // Default to false
         enableROIOptimization = intent.getBooleanExtra("enableROIOptimization", true)
         logToRustBackend = intent.getBooleanExtra("logToRustBackend", true)
         captureInterval = intent.getLongExtra("captureInterval", 1000L)
+        forceNoCaching = intent.getBooleanExtra("forceNoCaching", true) // Force no caching
+        
+        // Override caching if force no caching is enabled
+        if (forceNoCaching) {
+            enableCaching = false
+        }
         
         Log.d(TAG, "🔧 Configuration: validation=$enableValidation, caching=$enableCaching, roi=$enableROIOptimization, interval=${captureInterval}ms")
     }
@@ -183,33 +190,87 @@ class LocalTextExtractionService : Service() {
         }
     }
 
-    fun startLocalTextExtractionLoop() {
+    fun startLocalTextExtractionLoop(singleExtraction: Boolean = false) {
         if (isCaptureLoopActive) {
             Log.w(TAG, "⚠️ Local text extraction loop already active")
             return
         }
 
         isCaptureLoopActive = true
-        Log.d(TAG, "🎬 Starting local text extraction loop (${captureInterval}ms interval)")
+        Log.d(TAG, "🎬 Starting local text extraction ${if (singleExtraction) "single extraction" else "loop (${captureInterval}ms interval)"}")
         Log.d(TAG, "🤖 Local ML Kit: ENABLED")
         Log.d(TAG, "🛡️ Validation: ${if (enableValidation) "ENABLED" else "DISABLED"}")
         Log.d(TAG, "💾 Caching: ${if (enableCaching) "ENABLED" else "DISABLED"}")
 
-        // Local text extraction loop
+        // Local text extraction loop with robust error handling
         serviceScope.launch {
-            while (isActive && isCaptureLoopActive) {
-                try {
-                    if (!isProcessingFrame.get()) {
+            var consecutiveErrors = 0
+            val maxConsecutiveErrors = 10
+            
+            try {
+                // Process first frame
+                if (!isProcessingFrame.get()) {
+                    try {
                         processFrameWithLocalML()
+                        consecutiveErrors = 0 // Reset on success
+                    } catch (e: Exception) {
+                        consecutiveErrors++
+                        Log.w(TAG, "⚠️ Error in frame processing (attempt $consecutiveErrors): ${e.message}")
                     }
+                }
 
-                    // Wait for next interval
-                    delay(captureInterval)
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error in local text extraction loop: ${e.message}")
+                // If single extraction, stop immediately after first frame
+                if (singleExtraction) {
+                    Log.d(TAG, "✅ Single extraction completed")
+                    isCaptureLoopActive = false
+                    return@launch
+                }
+
+                // Continue with loop for continuous extraction
+                while (isActive && isCaptureLoopActive) {
+                    try {
+                        // Always try to process frame, even if previous attempts failed
+                        if (!isProcessingFrame.get()) {
+                            try {
+                                processFrameWithLocalML()
+                                consecutiveErrors = 0 // Reset on success
+                            } catch (e: Exception) {
+                                consecutiveErrors++
+                                Log.w(TAG, "⚠️ Error in frame processing (attempt $consecutiveErrors): ${e.message}")
+                                
+                                // If too many consecutive errors, increase delay but keep trying
+                                if (consecutiveErrors >= maxConsecutiveErrors) {
+                                    Log.w(TAG, "⚠️ Many consecutive errors, using longer delay")
+                                    delay(captureInterval * 2) // Double the delay
+                                    consecutiveErrors = maxConsecutiveErrors / 2 // Reset partially
+                                }
+                            }
+                        }
+
+                        // Wait for next interval (always continue the loop)
+                        delay(captureInterval)
+                        
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ Error in extraction loop iteration: ${e.message}")
+                        // Don't break the loop, just log and continue
+                        delay(captureInterval)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Critical error in text extraction loop: ${e.message}")
+                // Even on critical error, don't stop the loop completely
+                if (isCaptureLoopActive && !singleExtraction) {
+                    Log.d(TAG, "🔄 Restarting extraction loop after critical error...")
+                    delay(5000) // Wait 5 seconds before restart
+                    if (isCaptureLoopActive) {
+                        startLocalTextExtractionLoop(false) // Restart the loop
+                    }
+                }
+            } finally {
+                if (!isCaptureLoopActive || singleExtraction) {
+                    Log.d(TAG, "⏹️ Local text extraction ${if (singleExtraction) "single extraction" else "loop"} stopped")
                 }
             }
-            Log.d(TAG, "⏹️ Local text extraction loop stopped")
         }
     }
 
@@ -222,11 +283,29 @@ class LocalTextExtractionService : Service() {
             try {
                 val overallStartTime = System.currentTimeMillis()
 
-                // Trigger capture and get frame
+                // Trigger capture and get frame with retries
                 val frame = withContext(Dispatchers.Main) {
-                    onTriggerCapture?.invoke()
-                    delay(50) // Give time for capture
-                    onGetCapturedFrame?.invoke()
+                    var attempts = 0
+                    var capturedFrame: LocalTextExtractionService.CapturedFrame? = null
+                    
+                    while (attempts < 3 && capturedFrame == null) {
+                        attempts++
+                        try {
+                            onTriggerCapture?.invoke()
+                            delay(200) // Give more time for capture
+                            capturedFrame = onGetCapturedFrame?.invoke()
+                            
+                            if (capturedFrame == null) {
+                                Log.w(TAG, "⚠️ Capture attempt $attempts failed - no frame returned")
+                                if (attempts < 3) delay(500) // Wait before retry
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "⚠️ Capture attempt $attempts error: ${e.message}")
+                            if (attempts < 3) delay(500) // Wait before retry
+                        }
+                    }
+                    
+                    capturedFrame
                 }
 
                 if (frame != null) {
@@ -236,29 +315,53 @@ class LocalTextExtractionService : Service() {
                         Log.d(TAG, "📸 Frame captured: ${frame.width}x${frame.height}")
                     }
 
-                    // Extract text using local ML
-                    val extractionResult = extractTextLocally(frame)
+                    // Extract text using local ML with enhanced error handling
+                    val extractionResult = try {
+                        extractTextLocally(frame)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ Text extraction failed, creating empty result: ${e.message}")
+                        LocalExtractionResult(
+                            extractedText = "",
+                            confidence = 0f,
+                            textDensity = 0f,
+                            processingTimeMs = 0L,
+                            textRegions = 0,
+                            validationPassed = false,
+                            validationScore = 0f,
+                            fallbackUsed = false,
+                            fallbackStrategy = null,
+                            usedCache = false,
+                            roiDetected = false,
+                            isHighQuality = false,
+                            totalTimeMs = System.currentTimeMillis() - overallStartTime
+                        )
+                    }
+                    
                     val totalTime = System.currentTimeMillis() - overallStartTime
 
-                    // Update statistics
+                    // Update statistics (count all attempts, not just successful ones)
                     if (extractionResult.extractedText.isNotEmpty()) {
                         successfulExtractions++
                         totalTextExtracted += extractionResult.extractedText.length
                     }
                     totalProcessingTime += totalTime
 
-                    // Log results to Rust backend (console logs are forwarded)
+                    // Always log results to Rust backend for debugging
                     if (logToRustBackend) {
                         logExtractionResult(extractionResult, frame)
                     }
 
                 } else {
                     if (logToRustBackend) {
-                        Log.v(TAG, "⏭️ No frame available")
+                        Log.w(TAG, "⚠️ No frame available after 3 attempts - check screen capture service connection")
                     }
+                    
+                    // Still count this as a capture attempt for statistics
+                    totalCaptures++
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error processing frame with local ML: ${e.message}")
+                // Don't let processing errors stop the loop
             } finally {
                 isProcessingFrame.set(false)
             }
@@ -269,19 +372,61 @@ class LocalTextExtractionService : Service() {
         return try {
             val startTime = System.currentTimeMillis()
             
-            // Convert base64 to bitmap
-            val bitmap = base64ToBitmap(frame.base64)
+            Log.d(TAG, "🔍 Starting local text extraction for frame ${frame.width}x${frame.height}")
             
-            // Extract text using our local ML system
-            val result = if (enableValidation) {
-                // Use validation system with fallback
-                localTextExtractor.extractText(bitmap)
-            } else {
-                // Use basic extraction
-                localTextExtractor.extractText(bitmap)
+            // Convert base64 to bitmap with enhanced error handling
+            val bitmap = try {
+                base64ToBitmap(frame.base64)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to convert base64 to bitmap: ${e.message}")
+                throw e
             }
             
-            bitmap.recycle()
+            Log.d(TAG, "✅ Bitmap created: ${bitmap.width}x${bitmap.height}")
+            
+            // Validate bitmap
+            if (bitmap.isRecycled) {
+                Log.e(TAG, "❌ Bitmap is recycled!")
+                throw IllegalStateException("Bitmap is recycled")
+            }
+            
+            // Extract text using our local ML system with better error handling
+            val result = try {
+                if (enableValidation) {
+                    // Use validation system with fallback
+                    localTextExtractor.extractText(bitmap)
+                } else {
+                    // Use basic extraction
+                    localTextExtractor.extractText(bitmap)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ ML Kit extraction failed: ${e.message}")
+                // Create a fallback result instead of throwing
+                com.allot.detection.TextExtractionResult(
+                    extractedText = "",
+                    confidence = 0f,
+                    textRegions = emptyList(),
+                    textDensity = 0f,
+                    processingTimeMs = System.currentTimeMillis() - startTime,
+                    usedCache = false,
+                    roiDetected = false,
+                    roiArea = 0,
+                    preprocessingTimeMs = 0L,
+                    validationPassed = false,
+                    validationScore = 0f,
+                    fallbackUsed = false,
+                    fallbackStrategy = null
+                )
+            }
+            
+            Log.d(TAG, "✅ ML Kit extraction complete: '${result.extractedText}' (${result.textRegions.size} regions)")
+            
+            // Always recycle bitmap to prevent memory leaks
+            try {
+                bitmap.recycle()
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️ Error recycling bitmap: ${e.message}")
+            }
             
             val totalTime = System.currentTimeMillis() - startTime
             
@@ -294,7 +439,7 @@ class LocalTextExtractionService : Service() {
                 validationPassed = result.validationPassed,
                 validationScore = result.validationScore,
                 fallbackUsed = result.fallbackUsed,
-                fallbackStrategy = result.fallbackStrategy?.name,
+                fallbackStrategy = result.fallbackStrategy,
                 usedCache = result.usedCache,
                 roiDetected = result.roiDetected,
                 isHighQuality = result.isHighQuality(),
@@ -302,7 +447,7 @@ class LocalTextExtractionService : Service() {
             )
             
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error in local text extraction: ${e.message}")
+            Log.e(TAG, "❌ Error in local text extraction: ${e.message}", e)
             LocalExtractionResult(
                 extractedText = "",
                 confidence = 0f,
@@ -322,8 +467,65 @@ class LocalTextExtractionService : Service() {
     }
 
     private fun base64ToBitmap(base64String: String): android.graphics.Bitmap {
-        val decodedBytes = android.util.Base64.decode(base64String, android.util.Base64.DEFAULT)
-        return android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        return try {
+            Log.d(TAG, "🔄 Converting base64 to bitmap (${base64String.length} chars)")
+            
+            // Validate base64 string
+            if (base64String.isEmpty()) {
+                throw IllegalArgumentException("Base64 string is empty")
+            }
+            
+            if (base64String.length < 100) {
+                Log.w(TAG, "⚠️ Base64 string seems very short: ${base64String.length} chars")
+            }
+            
+            val decodedBytes = try {
+                android.util.Base64.decode(base64String, android.util.Base64.DEFAULT)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Base64 decode failed: ${e.message}")
+                throw IllegalArgumentException("Failed to decode base64 string: ${e.message}")
+            }
+            
+            Log.d(TAG, "✅ Base64 decoded: ${decodedBytes.size} bytes")
+            
+            if (decodedBytes.isEmpty()) {
+                throw IllegalArgumentException("Decoded bytes are empty")
+            }
+            
+            val bitmap = try {
+                android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Bitmap decode failed: ${e.message}")
+                throw IllegalArgumentException("Failed to decode bitmap from bytes: ${e.message}")
+            }
+            
+            if (bitmap != null) {
+                Log.d(TAG, "✅ Bitmap created successfully: ${bitmap.width}x${bitmap.height}")
+                
+                // Validate bitmap properties
+                if (bitmap.width <= 0 || bitmap.height <= 0) {
+                    Log.e(TAG, "❌ Invalid bitmap dimensions: ${bitmap.width}x${bitmap.height}")
+                    bitmap.recycle()
+                    throw IllegalArgumentException("Invalid bitmap dimensions")
+                }
+                
+                if (bitmap.isRecycled) {
+                    Log.e(TAG, "❌ Bitmap is already recycled")
+                    throw IllegalArgumentException("Bitmap is recycled")
+                }
+                
+                // Log bitmap info for debugging
+                Log.d(TAG, "📊 Bitmap info: ${bitmap.width}x${bitmap.height}, config=${bitmap.config}, bytes=${bitmap.byteCount}")
+                
+                bitmap
+            } else {
+                Log.e(TAG, "❌ BitmapFactory returned null")
+                throw IllegalArgumentException("BitmapFactory returned null - invalid image data")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error converting base64 to bitmap: ${e.message}", e)
+            throw e
+        }
     }
 
     private fun logExtractionResult(result: LocalExtractionResult, frame: CapturedFrame) {
@@ -391,6 +593,11 @@ class LocalTextExtractionService : Service() {
         }
     }
 
+    fun performSingleTextExtraction() {
+        Log.d(TAG, "🧪 Performing single text extraction test...")
+        startLocalTextExtractionLoop(singleExtraction = true)
+    }
+
     fun stopLocalTextExtractionLoop() {
         isCaptureLoopActive = false
         Log.d(TAG, "🛑 Stopping local text extraction loop")
@@ -407,8 +614,23 @@ class LocalTextExtractionService : Service() {
     }
 
     fun setCachingEnabled(enabled: Boolean) {
-        enableCaching = enabled
-        Log.d(TAG, "💾 Caching: ${if (enabled) "ENABLED" else "DISABLED"}")
+        // Always disable caching to prevent eco mode behavior
+        enableCaching = false
+        forceNoCaching = true
+        Log.d(TAG, "💾 Caching: DISABLED (forced to prevent eco mode)")
+    }
+
+    fun forceRestartExtractionLoop() {
+        Log.d(TAG, "🔄 Force restarting extraction loop...")
+        stopLocalTextExtractionLoop()
+        
+        // Wait a moment then restart
+        serviceScope.launch {
+            delay(2000)
+            if (isProcessingActive) {
+                startLocalTextExtractionLoop()
+            }
+        }
     }
 
     fun getStatistics(): Map<String, Any> {

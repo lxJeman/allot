@@ -218,10 +218,74 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             // Set flag to process the next available frame
             shouldProcessNextFrame = true
             
-            promise.resolve(true)
+            // Wait for frame to be captured and return it
+            Thread {
+                try {
+                    var attempts = 0
+                    val maxAttempts = 20 // Wait up to 2 seconds (20 * 100ms)
+                    
+                    while (attempts < maxAttempts) {
+                        Thread.sleep(100) // Wait 100ms
+                        
+                        val frame = lastCapturedFrame
+                        if (frame != null) {
+                            // Check if this is a fresh frame (captured within last 5 seconds)
+                            val frameAge = System.currentTimeMillis() - frame.timestamp
+                            if (frameAge < 5000) {
+                                Log.d(TAG, "✅ Frame captured: ${frame.width}x${frame.height}")
+                                
+                                val result = Arguments.createMap().apply {
+                                    putString("base64", frame.base64)
+                                    putInt("width", frame.width)
+                                    putInt("height", frame.height)
+                                    putDouble("timestamp", frame.timestamp.toDouble())
+                                }
+                                
+                                promise.resolve(result)
+                                return@Thread
+                            }
+                        }
+                        
+                        attempts++
+                    }
+                    
+                    // Timeout - no frame captured
+                    Log.w(TAG, "⚠️ Timeout waiting for frame capture")
+                    promise.reject("CAPTURE_TIMEOUT", "Failed to capture frame within timeout period")
+                    
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error waiting for frame: ${e.message}", e)
+                    promise.reject("CAPTURE_ERROR", e.message)
+                }
+            }.start()
+            
         } catch (e: Exception) {
             Log.e(TAG, "Error requesting next frame: ${e.message}", e)
             promise.reject("CAPTURE_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getLastCapturedFrame(promise: Promise) {
+        try {
+            val frame = lastCapturedFrame
+            if (frame != null) {
+                Log.d(TAG, "📸 Returning last captured frame: ${frame.width}x${frame.height}")
+                
+                val result = Arguments.createMap().apply {
+                    putString("base64", frame.base64)
+                    putInt("width", frame.width)
+                    putInt("height", frame.height)
+                    putDouble("timestamp", frame.timestamp.toDouble())
+                }
+                
+                promise.resolve(result)
+            } else {
+                promise.reject("NO_FRAME", "No frame has been captured yet")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting last frame: ${e.message}", e)
+            promise.reject("GET_FRAME_ERROR", e.message)
         }
     }
 
@@ -445,8 +509,9 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             lastCapturedFrame
         }
         
-        // Enable native backend by default
-        service.setNativeBackendEnabled(true)
+        // DON'T automatically enable native backend - respect existing setting
+        // This allows LocalTextExtractionModule to control the backend mode
+        Log.d(TAG, "🔧 Native backend setting preserved (not overridden)")
         
         Log.d(TAG, "✅ Service callbacks connected")
     }

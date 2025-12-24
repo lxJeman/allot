@@ -1,0 +1,11 @@
+{
+    "confidence": 0.8999999761581421,
+    "extractedText": "16:41 in 1 SmartĎetectionModule: Available ScreenCaptureModule : V Available ScreenPermissionModule: V Available LocalTextExtractionModule: v Available Configuration Enable Validation & Fallback Enable Caching Auto-scroll on Text Detection Capture Interval: 1000ms | Validation: ON | Cache: ON Home Testing.. X Processing... Explore Clear All Data Capture tests/local-text-...", 
+    "frameHeight": 1600, 
+    "frameWidth": 720, 
+    "message": "Single text extraction completed", 
+    "processingTime": 1590, 
+    "screenCaptureAvailable": true, 
+    "success": true, 
+    "textRegions": 21
+}

@@ -312,12 +312,51 @@ const LocalTextExtractionTest: React.FC = () => {
       }
       
       // Start capture first
+      console.log('📸 Starting screen capture...');
       await ScreenCaptureModule.startScreenCapture();
       
       // Wait a moment for capture to initialize
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Capture single frame
+      // Use LocalTextExtractionModule if available, otherwise fallback
+      if (LocalTextExtractionModule) {
+        console.log('🤖 Using LocalTextExtractionModule for single extraction...');
+        
+        try {
+          const result = await LocalTextExtractionModule.performSingleTextExtraction();
+          
+          console.log('✅ Single extraction result:', result);
+          
+          Alert.alert(
+            'Single Extraction Complete',
+            `Text: "${result.extractedText || 'No text detected'}"\n` +
+            `Confidence: ${((result.confidence || 0) * 100).toFixed(1)}%\n` +
+            `Processing Time: ${result.processingTime || 0}ms\n` +
+            `Frame: ${result.frameWidth}x${result.frameHeight}`,
+            [{ text: 'OK' }]
+          );
+          
+        } catch (error) {
+          console.error('LocalTextExtractionModule failed, trying fallback:', error);
+          await performFallbackSingleExtraction();
+        }
+      } else {
+        console.log('⚠️ LocalTextExtractionModule not available, using fallback...');
+        await performFallbackSingleExtraction();
+      }
+      
+    } catch (error) {
+      console.error('Error in single extraction test:', error);
+      Alert.alert('Error', `Failed to test extraction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const performFallbackSingleExtraction = async () => {
+    try {
+      // Capture single frame using the updated method
+      console.log('📸 Capturing frame...');
       const captureResult = await ScreenCaptureModule.captureNextFrame();
       
       if (!captureResult?.base64) {
@@ -325,20 +364,26 @@ const LocalTextExtractionTest: React.FC = () => {
         return;
       }
 
+      console.log(`✅ Frame captured: ${captureResult.width}x${captureResult.height}`);
+
       // Perform text extraction
-      await performLocalTextExtraction();
+      console.log('🔍 Extracting text...');
+      const extractionResult = await SmartDetectionModule.extractText(captureResult.base64);
+      
+      console.log('✅ Text extraction result:', extractionResult);
       
       Alert.alert(
-        'Single Extraction Complete',
-        'Check the terminal for detailed results of the text extraction.',
+        'Single Extraction Complete (Fallback)',
+        `Text: "${extractionResult.extractedText || 'No text detected'}"\n` +
+        `Confidence: ${((extractionResult.confidence || 0) * 100).toFixed(1)}%\n` +
+        `Processing Time: ${extractionResult.processingTimeMs || 0}ms\n` +
+        `Frame: ${captureResult.width}x${captureResult.height}`,
         [{ text: 'OK' }]
       );
       
     } catch (error) {
-      console.error('Error in single extraction test:', error);
-      Alert.alert('Error', `Failed to test extraction: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsLoading(false);
+      console.error('Fallback extraction failed:', error);
+      Alert.alert('Error', `Fallback extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

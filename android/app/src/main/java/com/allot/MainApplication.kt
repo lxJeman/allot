@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.res.Configuration
 
 import com.allot.ScreenPermissionModule
+import com.allot.LocalTextExtractionPackage
+import com.allot.SmartDetectionPackage
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -28,6 +30,8 @@ class MainApplication : Application(), ReactApplication {
               // Add our custom native modules
               add(ScreenPermissionPackage())
               add(ScreenCapturePackage())
+              add(LocalTextExtractionPackage())
+              add(SmartDetectionPackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"

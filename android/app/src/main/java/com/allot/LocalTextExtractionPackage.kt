@@ -5,12 +5,15 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
-class ScreenCapturePackage : ReactPackage {
+/**
+ * LocalTextExtractionPackage - React Native package for LocalTextExtractionModule
+ * 
+ * Registers the LocalTextExtractionModule with React Native bridge
+ */
+class LocalTextExtractionPackage : ReactPackage {
+
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-        return listOf(
-            ScreenCaptureModule(reactContext),
-            LocalTextExtractionModule(reactContext)
-        )
+        return listOf(LocalTextExtractionModule(reactContext))
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
