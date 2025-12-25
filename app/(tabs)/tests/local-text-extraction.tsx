@@ -60,6 +60,7 @@ const LocalTextExtractionTest: React.FC = () => {
   const isCapturingRef = useRef(false);
   const isProcessingRef = useRef(false);
   const captureLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -76,6 +77,10 @@ const LocalTextExtractionTest: React.FC = () => {
       if (captureLoopRef.current) {
         clearInterval(captureLoopRef.current);
         captureLoopRef.current = null;
+      }
+      if (statsPollingRef.current) {
+        clearInterval(statsPollingRef.current);
+        statsPollingRef.current = null;
       }
     };
   }, []);
@@ -153,6 +158,8 @@ const LocalTextExtractionTest: React.FC = () => {
         startTextExtractionLoop();
       } else {
         console.log('🌙 Background mode enabled - service will handle extraction independently');
+        // Start polling for background stats
+        startStatsPolling();
       }
 
       Alert.alert(
@@ -183,6 +190,9 @@ const LocalTextExtractionTest: React.FC = () => {
         captureLoopRef.current = null;
         console.log('✅ Extraction loop stopped');
       }
+
+      // Stop stats polling
+      stopStatsPolling();
 
       // Stop local text extraction service if available
       if (LocalTextExtractionModule) {
@@ -528,6 +538,52 @@ const LocalTextExtractionTest: React.FC = () => {
     } catch (error) {
       console.error('Error clearing data:', error);
       Alert.alert('Error', `Failed to clear data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const startStatsPolling = () => {
+    if (statsPollingRef.current) {
+      clearInterval(statsPollingRef.current);
+    }
+
+    console.log('📊 Starting background stats polling...');
+    
+    const pollStats = async () => {
+      try {
+        if (LocalTextExtractionModule) {
+          const stats = await LocalTextExtractionModule.getLocalTextExtractionStats();
+          
+          if (stats.isRunning && stats.isActive) {
+            // Update UI with background service stats
+            setCaptureStats({
+              totalCaptures: stats.totalCaptures,
+              successfulExtractions: stats.successfulExtractions,
+              averageProcessingTime: stats.averageProcessingTime,
+              averageConfidence: stats.averageConfidence,
+              cacheHitRate: 0, // Cache is disabled in background mode
+              totalTextExtracted: stats.totalTextExtracted,
+            });
+            
+            console.log(`📊 Background stats: ${stats.totalCaptures} captures, ${stats.successfulExtractions} successful, ${stats.totalTextExtracted} chars`);
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ Error polling background stats:', error);
+      }
+    };
+
+    // Poll every 2 seconds
+    statsPollingRef.current = setInterval(pollStats, 2000);
+    
+    // Initial poll
+    pollStats();
+  };
+
+  const stopStatsPolling = () => {
+    if (statsPollingRef.current) {
+      clearInterval(statsPollingRef.current);
+      statsPollingRef.current = null;
+      console.log('📊 Background stats polling stopped');
     }
   };
 

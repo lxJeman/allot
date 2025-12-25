@@ -167,6 +167,8 @@ class LocalTextExtractionModule(reactContext: ReactApplicationContext) :
                     putDouble("successRate", (stats["successRate"] as Float).toDouble())
                     putDouble("averageProcessingTime", (stats["averageProcessingTime"] as Float).toDouble())
                     putDouble("totalTextExtracted", (stats["totalTextExtracted"] as Long).toDouble())
+                    putDouble("averageConfidence", (stats.getOrDefault("averageConfidence", 0f) as Float).toDouble())
+                    putDouble("cacheHitRate", 0.0) // Cache is disabled in background mode
                     putBoolean("isActive", stats["isActive"] as Boolean)
                 }
                 promise.resolve(result)
@@ -178,6 +180,8 @@ class LocalTextExtractionModule(reactContext: ReactApplicationContext) :
                     putDouble("successRate", 0.0)
                     putDouble("averageProcessingTime", 0.0)
                     putDouble("totalTextExtracted", 0.0)
+                    putDouble("averageConfidence", 0.0)
+                    putDouble("cacheHitRate", 0.0)
                     putBoolean("isActive", false)
                 }
                 promise.resolve(result)

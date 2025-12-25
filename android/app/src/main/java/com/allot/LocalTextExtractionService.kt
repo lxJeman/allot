@@ -55,6 +55,8 @@ class LocalTextExtractionService : Service() {
     private var successfulExtractions = 0L
     private var totalProcessingTime = 0L
     private var totalTextExtracted = 0L
+    private var totalConfidence = 0f
+    private var confidenceCount = 0L
 
     // Callbacks for screen capture integration
     var onTriggerCapture: (() -> Unit)? = null
@@ -421,6 +423,11 @@ class LocalTextExtractionService : Service() {
                         successfulExtractions++
                         totalTextExtracted += extractionResult.extractedText.length
                     }
+                    
+                    // Track confidence for all attempts
+                    totalConfidence += extractionResult.confidence
+                    confidenceCount++
+                    
                     totalProcessingTime += totalTime
 
                     // Always log results to Rust backend for debugging
@@ -716,6 +723,7 @@ class LocalTextExtractionService : Service() {
             "successfulExtractions" to successfulExtractions,
             "successRate" to if (totalCaptures > 0) (successfulExtractions.toFloat() / totalCaptures) * 100 else 0f,
             "averageProcessingTime" to if (totalCaptures > 0) totalProcessingTime.toFloat() / totalCaptures else 0f,
+            "averageConfidence" to if (confidenceCount > 0) (totalConfidence / confidenceCount) * 100 else 0f,
             "totalTextExtracted" to totalTextExtracted,
             "isActive" to isCaptureLoopActive
         )
