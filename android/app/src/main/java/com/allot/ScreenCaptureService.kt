@@ -51,6 +51,9 @@ class ScreenCaptureService : Service() {
     // Callback to get captured frame (set by ScreenCaptureModule)
     var onGetCapturedFrame: (() -> CapturedFrame?)? = null
 
+    // NEW: Direct bitmap callback for hot path (service-to-service)
+    var onGetCapturedBitmap: (() -> android.graphics.Bitmap?)? = null
+
     data class CapturedFrame(
             val base64: String,
             val width: Int,

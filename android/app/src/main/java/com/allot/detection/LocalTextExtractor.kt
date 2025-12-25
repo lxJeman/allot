@@ -24,7 +24,9 @@ class LocalTextExtractor {
     }
     
     // ML Kit text recognizer with Latin script optimization
-    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).also {
+        Log.d(TAG, "🤖 ML Kit TextRecognizer initialized with DEFAULT_OPTIONS")
+    }
     
     /**
      * Extract text from bitmap using ML Kit directly
@@ -47,20 +49,32 @@ class LocalTextExtractor {
             }
             
             // Create ML Kit input image
-            val inputImage = InputImage.fromBitmap(bitmap, 0)
-            Log.d(TAG, "✅ InputImage created successfully")
+            val inputImage = try {
+                Log.d(TAG, "🖼️ Creating InputImage from bitmap...")
+                val image = InputImage.fromBitmap(bitmap, 0)
+                Log.d(TAG, "✅ InputImage created successfully: ${image.width}x${image.height}, format=${image.format}")
+                image
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to create InputImage: ${e.message}")
+                throw Exception("Failed to create InputImage: ${e.message}", e)
+            }
             
             // Perform text recognition
             val visionText = suspendCancellableCoroutine { continuation ->
                 Log.d(TAG, "🔍 Processing image with ML Kit...")
+                Log.d(TAG, "📊 InputImage details: width=${inputImage.width}, height=${inputImage.height}, format=${inputImage.format}")
+                
                 textRecognizer.process(inputImage)
                     .addOnSuccessListener { text ->
-                        Log.d(TAG, "✅ ML Kit processing successful")
+                        Log.d(TAG, "✅ ML Kit processing successful - found ${text.textBlocks.size} text blocks")
                         continuation.resume(text)
                     }
                     .addOnFailureListener { exception ->
                         Log.e(TAG, "❌ ML Kit processing failed: ${exception.message}")
-                        continuation.resumeWithException(exception)
+                        Log.e(TAG, "❌ Exception type: ${exception.javaClass.simpleName}")
+                        Log.e(TAG, "❌ Exception cause: ${exception.cause?.message}")
+                        exception.printStackTrace()
+                        continuation.resumeWithException(Exception("Failed to run text recognizer text-recognition: ${exception.message}", exception))
                     }
             }
             

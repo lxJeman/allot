@@ -42,6 +42,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var captureInterval = 100L // 100ms = 10 FPS
         private var shouldProcessNextFrame = false // Control frame processing
         private var lastCapturedFrame: ScreenCaptureService.CapturedFrame? = null
+        private var lastCapturedBitmap: android.graphics.Bitmap? = null // HOT PATH: Direct bitmap storage
         private var pendingCapturePromise: Promise? = null // Store pending promise
         private var backgroundThread: HandlerThread? = null
     }
@@ -140,7 +141,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                                 connectServiceCallbacks()
 
                                 // 6. Start native capture loop in service
-                                ScreenCaptureService.getInstance()?.startCaptureLoop()
+                                com.allot.ScreenCaptureService.getInstance()?.startCaptureLoop()
 
                                 isCapturing = true
                                 Log.d(TAG, "✅ Screen capture started successfully")
@@ -465,7 +466,10 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                         bitmap
                     }
 
-            // Convert to Base64
+            // Store bitmap for HOT PATH (direct bitmap access)
+            lastCapturedBitmap = croppedBitmap
+
+            // Convert to Base64 for COLD PATH (React Native bridge)
             val base64 = bitmapToBase64(croppedBitmap, 80) // 80% JPEG quality
 
             // Save to cache (optional)
@@ -572,7 +576,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
     private fun connectServiceCallbacks() {
         Log.d(TAG, "🔗 Connecting service callbacks...")
 
-        val service = ScreenCaptureService.getInstance()
+        val service = com.allot.ScreenCaptureService.getInstance()
         if (service == null) {
             Log.w(TAG, "⚠️ Service not available for callbacks")
             return
@@ -589,8 +593,13 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             }
         }
 
-        // Set callback to get captured frame (for native backend)
+        // COLD PATH: Base64 callback for React Native bridge
         service.onGetCapturedFrame = { lastCapturedFrame }
+
+        // HOT PATH: Direct bitmap callback for service-to-service communication
+        service.onGetCapturedBitmap = { lastCapturedBitmap }
+
+        Log.d(TAG, "✅ Service callbacks connected (hot + cold paths)")
 
         // DON'T automatically enable native backend - respect existing setting
         // This allows LocalTextExtractionModule to control the backend mode

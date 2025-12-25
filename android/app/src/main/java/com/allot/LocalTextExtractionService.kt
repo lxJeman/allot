@@ -235,6 +235,33 @@ class LocalTextExtractionService : Service() {
                     screenCaptureService.onTriggerCapture?.invoke()
                 }
                 
+                // HOT PATH: Set up direct bitmap callback
+                screenCaptureService.onGetCapturedBitmap = {
+                    try {
+                        // Use the existing frame capture but convert to bitmap directly
+                        val frame = screenCaptureService.onGetCapturedFrame?.invoke()
+                        if (frame != null) {
+                            // Convert base64 to bitmap (still faster than full cold path)
+                            val decodedBytes = android.util.Base64.decode(frame.base64, android.util.Base64.DEFAULT)
+                            val bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                            
+                            if (bitmap != null && !bitmap.isRecycled) {
+                                Log.v(TAG, "🔥 HOT PATH: Converted existing frame to bitmap ${bitmap.width}x${bitmap.height}")
+                                bitmap
+                            } else {
+                                Log.v(TAG, "⚠️ HOT PATH: Failed to create bitmap from frame")
+                                null
+                            }
+                        } else {
+                            Log.v(TAG, "⚠️ HOT PATH: No frame available")
+                            null
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ HOT PATH: Failed to get bitmap: ${e.message}")
+                        null
+                    }
+                }
+                
                 onGetCapturedFrame = {
                     val frame = screenCaptureService.onGetCapturedFrame?.invoke()
                     if (frame != null) {
@@ -362,7 +389,66 @@ class LocalTextExtractionService : Service() {
             try {
                 val overallStartTime = System.currentTimeMillis()
 
-                // Trigger capture and get frame with retries
+                // 🔥 HOT PATH ATTEMPT: Try direct bitmap capture first
+                var hotPathSuccess = false
+                try {
+                    val screenCaptureService = ScreenCaptureService.getInstance()
+                    if (screenCaptureService != null) {
+                        // Trigger capture
+                        withContext(Dispatchers.Main) {
+                            onTriggerCapture?.invoke()
+                            delay(100) // Short delay for capture
+                        }
+                        
+                        // Try to get direct bitmap
+                        val directBitmap = screenCaptureService.onGetCapturedBitmap?.invoke()
+                        if (directBitmap != null && !directBitmap.isRecycled) {
+                            Log.d(TAG, "📸 Direct bitmap captured: ${directBitmap.width}x${directBitmap.height} (HOT PATH)")
+                            
+                            // Extract text directly from bitmap - HOT PATH!
+                            val mlStartTime = System.currentTimeMillis()
+                            val result = localTextExtractor.extractText(directBitmap)
+                            val mlTime = System.currentTimeMillis() - mlStartTime
+                            val totalTime = System.currentTimeMillis() - overallStartTime
+                            
+                            // Update statistics
+                            totalCaptures++
+                            if (result.extractedText.isNotEmpty()) {
+                                successfulExtractions++
+                                totalTextExtracted += result.extractedText.length
+                            }
+                            totalConfidence += result.confidence
+                            confidenceCount++
+                            totalProcessingTime += totalTime
+                            
+                            // Log HOT PATH result
+                            if (logToRustBackend) {
+                                Log.d(TAG, "")
+                                Log.d(TAG, "🔍 ═══════════════════════════════════════")
+                                Log.d(TAG, "🔍 LOCAL ML TEXT EXTRACTION RESULT (HOT PATH)")
+                                Log.d(TAG, "🔍 ═══════════════════════════════════════")
+                                Log.d(TAG, "📱 Frame: ${directBitmap.width}x${directBitmap.height}")
+                                Log.d(TAG, "📝 Extracted Text: \"${result.extractedText.take(200)}${if (result.extractedText.length > 200) "..." else ""}\"")
+                                Log.d(TAG, "📊 Confidence: ${(result.confidence * 100).toInt()}%")
+                                Log.d(TAG, "📏 Text Density: ${(result.textDensity * 100).toInt()}%")
+                                Log.d(TAG, "⏱️ ML Processing Time: ${mlTime}ms")
+                                Log.d(TAG, "⏱️ Total Time (direct bitmap): ${totalTime}ms")
+                                Log.d(TAG, "🎯 Text Regions: ${result.textRegions.size}")
+                                Log.d(TAG, "⚡ Path: HOT (direct bitmap, no Base64 conversion)")
+                                Log.d(TAG, "🔍 ═══════════════════════════════════════")
+                                Log.d(TAG, "")
+                            }
+                            
+                            hotPathSuccess = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚠️ Hot path failed, falling back to cold path: ${e.message}")
+                }
+                
+                // ❄️ COLD PATH FALLBACK: Only if hot path failed
+                if (!hotPathSuccess) {
+                    // Trigger capture and get frame with retries
                 val frame = withContext(Dispatchers.Main) {
                     var attempts = 0
                     var capturedFrame: LocalTextExtractionService.CapturedFrame? = null
@@ -443,6 +529,7 @@ class LocalTextExtractionService : Service() {
                     // Still count this as a capture attempt for statistics
                     totalCaptures++
                 }
+                } // End of cold path fallback
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error processing frame with local ML: ${e.message}")
                 // Don't let processing errors stop the loop
