@@ -390,8 +390,8 @@ const LocalTextExtractionTest: React.FC = () => {
       console.log('📸 Starting screen capture...');
       await ScreenCaptureModule.startScreenCapture();
 
-      // Wait a moment for capture to initialize
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait a brief moment for capture to initialize
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Use LocalTextExtractionModule if available, otherwise fallback
       if (LocalTextExtractionModule) {

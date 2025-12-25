@@ -13,6 +13,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.util.Base64
 import android.util.DisplayMetrics
@@ -42,6 +43,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var shouldProcessNextFrame = false // Control frame processing
         private var lastCapturedFrame: ScreenCaptureService.CapturedFrame? = null
         private var pendingCapturePromise: Promise? = null // Store pending promise
+        private var backgroundThread: HandlerThread? = null
     }
 
     override fun getName(): String {
@@ -125,7 +127,8 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
                         Log.d(TAG, "✅ MediaProjection created successfully")
 
-                        // MediaProjection created successfully - service will use React Native callbacks
+                        // MediaProjection created successfully - service will use React Native
+                        // callbacks
 
                         // 4. Set up image capture on main thread
                         Handler(Looper.getMainLooper()).post {
@@ -135,7 +138,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
                                 // 5. Connect service to trigger captures
                                 connectServiceCallbacks()
-                                
+
                                 // 6. Start native capture loop in service
                                 ScreenCaptureService.getInstance()?.startCaptureLoop()
 
@@ -213,62 +216,76 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                 promise.reject("NOT_CAPTURING", "Screen capture is not active")
                 return
             }
-            
+
             Log.d(TAG, "🎯 Requesting next frame capture...")
-            
-            // Check if we have a recent frame (within 500ms for faster response)
+
+            // Check if we have a recent frame (within 200ms for faster response)
             val frame = lastCapturedFrame
             val currentTime = System.currentTimeMillis()
-            
-            if (frame != null && (currentTime - frame.timestamp) < 500) {
+
+            if (frame != null && (currentTime - frame.timestamp) < 200) {
                 // We have a very recent frame, return it immediately
-                Log.d(TAG, "⚡ Returning recent frame: ${frame.width}x${frame.height}")
-                
-                val result = Arguments.createMap().apply {
-                    putString("base64", frame.base64)
-                    putInt("width", frame.width)
-                    putInt("height", frame.height)
-                    putDouble("timestamp", frame.timestamp.toDouble())
-                }
-                
+                Log.d(TAG, "⚡ Returning very recent frame: ${frame.width}x${frame.height}")
+
+                val result =
+                        Arguments.createMap().apply {
+                            putString("base64", frame.base64)
+                            putInt("width", frame.width)
+                            putInt("height", frame.height)
+                            putDouble("timestamp", frame.timestamp.toDouble())
+                        }
+
                 promise.resolve(result)
                 return
             }
-            
-            // No recent frame, wait for a new one
+
+            // No recent frame, wait for a new one (should be very fast now)
             Log.d(TAG, "⏳ Waiting for fresh frame...")
-            
+
             // Check if we already have a pending promise
             if (pendingCapturePromise != null) {
                 Log.w(TAG, "⚠️ Frame capture already in progress, rejecting previous request")
-                pendingCapturePromise?.reject("CAPTURE_SUPERSEDED", "New capture request superseded this one")
+                pendingCapturePromise?.reject(
+                        "CAPTURE_SUPERSEDED",
+                        "New capture request superseded this one"
+                )
             }
-            
+
             // Store the promise to resolve when frame is captured
             pendingCapturePromise = promise
-            
+
             // Set a timeout to prevent hanging forever
-            Handler(Looper.getMainLooper()).postDelayed({
-                if (pendingCapturePromise == promise) {
-                    Log.w(TAG, "⚠️ Frame capture timeout, using last available frame")
-                    pendingCapturePromise = null
-                    
-                    // Return last frame even if it's old, better than nothing
-                    val lastFrame = lastCapturedFrame
-                    if (lastFrame != null) {
-                        val result = Arguments.createMap().apply {
-                            putString("base64", lastFrame.base64)
-                            putInt("width", lastFrame.width)
-                            putInt("height", lastFrame.height)
-                            putDouble("timestamp", lastFrame.timestamp.toDouble())
-                        }
-                        promise.resolve(result)
-                    } else {
-                        promise.reject("CAPTURE_TIMEOUT", "No frames available")
-                    }
-                }
-            }, 2000) // 2 second timeout
-            
+            Handler(Looper.getMainLooper())
+                    .postDelayed(
+                            {
+                                if (pendingCapturePromise == promise) {
+                                    Log.w(
+                                            TAG,
+                                            "⚠️ Frame capture timeout, using last available frame"
+                                    )
+                                    pendingCapturePromise = null
+
+                                    // Return last frame even if it's old, better than nothing
+                                    val lastFrame = lastCapturedFrame
+                                    if (lastFrame != null) {
+                                        val result =
+                                                Arguments.createMap().apply {
+                                                    putString("base64", lastFrame.base64)
+                                                    putInt("width", lastFrame.width)
+                                                    putInt("height", lastFrame.height)
+                                                    putDouble(
+                                                            "timestamp",
+                                                            lastFrame.timestamp.toDouble()
+                                                    )
+                                                }
+                                        promise.resolve(result)
+                                    } else {
+                                        promise.reject("CAPTURE_TIMEOUT", "No frames available")
+                                    }
+                                }
+                            },
+                            1000
+                    ) // 1 second timeout (should be much faster now)
         } catch (e: Exception) {
             Log.e(TAG, "Error requesting next frame: ${e.message}", e)
             promise.reject("CAPTURE_ERROR", e.message)
@@ -281,14 +298,15 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             val frame = lastCapturedFrame
             if (frame != null) {
                 Log.d(TAG, "📸 Returning last captured frame: ${frame.width}x${frame.height}")
-                
-                val result = Arguments.createMap().apply {
-                    putString("base64", frame.base64)
-                    putInt("width", frame.width)
-                    putInt("height", frame.height)
-                    putDouble("timestamp", frame.timestamp.toDouble())
-                }
-                
+
+                val result =
+                        Arguments.createMap().apply {
+                            putString("base64", frame.base64)
+                            putInt("width", frame.width)
+                            putInt("height", frame.height)
+                            putDouble("timestamp", frame.timestamp.toDouble())
+                        }
+
                 promise.resolve(result)
             } else {
                 promise.reject("NO_FRAME", "No frame has been captured yet")
@@ -326,26 +344,38 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                 throw IllegalStateException("Invalid screen dimensions: ${width}x${height}")
             }
 
-            // Create ImageReader for capturing screenshots
+            // Create ImageReader for capturing screenshots with more buffer capacity
             Log.d(TAG, "📷 Creating ImageReader...")
-            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            imageReader =
+                    ImageReader.newInstance(
+                            width,
+                            height,
+                            PixelFormat.RGBA_8888,
+                            5
+                    ) // Increased from 2 to 5
 
             if (imageReader?.surface == null) {
                 throw IllegalStateException("Failed to create ImageReader surface")
             }
 
-            // Create virtual display
-            Log.d(TAG, "🖥️ Creating VirtualDisplay...")
+            // Set up image available listener with proper background handler
+            backgroundThread = HandlerThread("ScreenCapture")
+            backgroundThread?.start()
+            val backgroundHandler = Handler(backgroundThread!!.looper)
+
+            // Create virtual display with different flags to force frame generation
+            Log.d(TAG, "🖥️ Creating VirtualDisplay with enhanced settings...")
             virtualDisplay =
                     mediaProjection?.createVirtualDisplay(
                             "AllotScreenCapture",
                             width,
                             height,
                             density,
-                            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or
+                                    DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC,
                             imageReader?.surface,
                             null,
-                            null
+                            backgroundHandler
                     )
 
             if (virtualDisplay == null) {
@@ -354,31 +384,49 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
             Log.d(TAG, "✅ VirtualDisplay created successfully")
 
-            // Set up image available listener on background thread
-            val backgroundHandler = Handler(Looper.getMainLooper())
+            // Start a periodic frame refresh mechanism as fallback
+            val refreshHandler = Handler(backgroundHandler.looper)
+            val refreshRunnable =
+                    object : Runnable {
+                        override fun run() {
+                            if (isCapturing) {
+                                try {
+                                    Log.v(TAG, "🔄 Forcing virtual display refresh...")
+                                    // Force a display update by changing a property
+                                    virtualDisplay?.resize(width, height, density)
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed to refresh display: ${e.message}")
+                                }
+                                refreshHandler.postDelayed(this, 500) // Every 500ms
+                            }
+                        }
+                    }
+            refreshHandler.post(refreshRunnable)
+
             imageReader?.setOnImageAvailableListener(
                     { reader ->
+                        var image: Image? = null
                         try {
-                            val image = reader.acquireLatestImage()
+                            Log.d(TAG, "🔥 Image available listener triggered!")
+                            image = reader.acquireLatestImage()
                             if (image != null) {
-                                // Only process if we're actively capturing AND a frame was requested
-                                if (isCapturing && shouldProcessNextFrame) {
-                                    shouldProcessNextFrame = false // Reset flag
-                                    Log.d(TAG, "🎯 Processing requested frame")
-                                    Thread {
-                                            try {
-                                                processImage(image)
-                                            } finally {
-                                                image.close()
-                                            }
-                                        }
-                                        .start()
+                                Log.d(TAG, "🔥 Got image: ${image.width}x${image.height}")
+                                // Always process frames when capturing is active
+                                if (isCapturing) {
+                                    Log.d(TAG, "🎯 Processing continuous frame")
+                                    // Process on same thread to ensure image is closed quickly
+                                    processImage(image)
                                 } else {
-                                    image.close() // Discard if not requested
+                                    Log.d(TAG, "🚫 Discarding frame - not capturing")
                                 }
+                            } else {
+                                Log.w(TAG, "⚠️ Image is null!")
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Error in image listener: ${e.message}", e)
+                        } finally {
+                            // CRITICAL: Always close the image to free up ImageReader slots
+                            image?.close()
                         }
                     },
                     backgroundHandler
@@ -422,16 +470,19 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
             // Save to cache (optional)
             val cacheFile = saveBitmapToCache(croppedBitmap)
-            
+
             val timestamp = System.currentTimeMillis()
 
             // Store last captured frame for native backend
-            lastCapturedFrame = ScreenCaptureService.CapturedFrame(
-                base64 = base64,
-                width = image.width,
-                height = image.height,
-                timestamp = timestamp
-            )
+            lastCapturedFrame =
+                    ScreenCaptureService.CapturedFrame(
+                            base64 = base64,
+                            width = image.width,
+                            height = image.height,
+                            timestamp = timestamp
+                    )
+
+            Log.v(TAG, "📸 Continuous frame updated: ${image.width}x${image.height} at $timestamp")
 
             // Send to React Native (if available)
             val params =
@@ -449,14 +500,15 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             val promise = pendingCapturePromise
             if (promise != null) {
                 pendingCapturePromise = null
-                
-                val result = Arguments.createMap().apply {
-                    putString("base64", base64)
-                    putInt("width", image.width)
-                    putInt("height", image.height)
-                    putDouble("timestamp", timestamp.toDouble())
-                }
-                
+
+                val result =
+                        Arguments.createMap().apply {
+                            putString("base64", base64)
+                            putInt("width", image.width)
+                            putInt("height", image.height)
+                            putDouble("timestamp", timestamp.toDouble())
+                        }
+
                 Log.d(TAG, "✅ Frame captured and promise resolved: ${image.width}x${image.height}")
                 promise.resolve(result)
             }
@@ -468,7 +520,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             croppedBitmap.recycle()
         } catch (e: Exception) {
             Log.e(TAG, "Error processing captured image: ${e.message}", e)
-            
+
             // Reject pending promise if there's an error
             val promise = pendingCapturePromise
             if (promise != null) {
@@ -519,13 +571,13 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
     private fun connectServiceCallbacks() {
         Log.d(TAG, "🔗 Connecting service callbacks...")
-        
+
         val service = ScreenCaptureService.getInstance()
         if (service == null) {
             Log.w(TAG, "⚠️ Service not available for callbacks")
             return
         }
-        
+
         // Set callback to trigger captures from service
         service.onTriggerCapture = {
             try {
@@ -536,19 +588,17 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                 Log.e(TAG, "❌ Error triggering capture: ${e.message}")
             }
         }
-        
+
         // Set callback to get captured frame (for native backend)
-        service.onGetCapturedFrame = {
-            lastCapturedFrame
-        }
-        
+        service.onGetCapturedFrame = { lastCapturedFrame }
+
         // DON'T automatically enable native backend - respect existing setting
         // This allows LocalTextExtractionModule to control the backend mode
         Log.d(TAG, "🔧 Native backend setting preserved (not overridden)")
-        
+
         Log.d(TAG, "✅ Service callbacks connected")
     }
-    
+
     private fun disconnectServiceCallbacks() {
         ScreenCaptureService.getInstance()?.let { service ->
             service.onTriggerCapture = null
@@ -572,6 +622,9 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
         mediaProjection?.stop()
         mediaProjection = null
+
+        backgroundThread?.quitSafely()
+        backgroundThread = null
     }
 
     private fun createNotificationChannel() {
