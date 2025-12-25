@@ -54,6 +54,7 @@ const LocalTextExtractionTest: React.FC = () => {
   const [captureInterval, setCaptureInterval] = useState(1500); // 1.5 seconds default for better performance
   const [autoScroll, setAutoScroll] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(true);
+  const [backgroundMode, setBackgroundMode] = useState(true);
 
   // Refs for stable state access in loops
   const isCapturingRef = useRef(false);
@@ -146,13 +147,19 @@ const LocalTextExtractionTest: React.FC = () => {
 
       setIsCapturing(true);
 
-      // Start the local text extraction loop
-      startTextExtractionLoop();
+      // If background mode is disabled, start React Native loop
+      if (!backgroundMode) {
+        console.log('📱 Starting React Native extraction loop (foreground only)');
+        startTextExtractionLoop();
+      } else {
+        console.log('🌙 Background mode enabled - service will handle extraction independently');
+      }
 
       Alert.alert(
         'Local Text Extraction Started',
-        `Capturing screen every ${captureInterval}ms and extracting text locally using ML Kit.\n\n` +
-        `Check the terminal (Rust backend) for detailed logs and extracted text.`,
+        backgroundMode 
+          ? `Background capture started! The service will continue running even when the app is minimized.\n\nCapture interval: ${captureInterval}ms\nCheck the notification to monitor progress.`
+          : `Foreground capture started with ${captureInterval}ms interval.\n\nNote: Capture will pause when app is minimized.`,
         [{ text: 'OK' }]
       );
 
@@ -591,6 +598,15 @@ const LocalTextExtractionTest: React.FC = () => {
         </View>
 
         <View style={styles.configRow}>
+          <Text style={styles.configLabel}>Background Operation</Text>
+          <Switch
+            value={backgroundMode}
+            onValueChange={setBackgroundMode}
+            disabled={isCapturing}
+          />
+        </View>
+
+        <View style={styles.configRow}>
           <Text style={styles.configLabel}>Capture Interval (ms)</Text>
           <View style={styles.intervalContainer}>
             <TouchableOpacity
@@ -618,7 +634,7 @@ const LocalTextExtractionTest: React.FC = () => {
         </View>
 
         <Text style={styles.configInfo}>
-          Capture Interval: {captureInterval}ms | Validation: {enableValidation ? 'ON' : 'OFF'} | Cache: {enableCaching ? 'ON' : 'OFF'} | Performance: {performanceMode ? 'ON' : 'OFF'}
+          Capture Interval: {captureInterval}ms | Validation: {enableValidation ? 'ON' : 'OFF'} | Cache: {enableCaching ? 'ON' : 'OFF'} | Performance: {performanceMode ? 'ON' : 'OFF'} | Background: {backgroundMode ? 'ON' : 'OFF'}
         </Text>
       </View>
 
@@ -735,6 +751,18 @@ const LocalTextExtractionTest: React.FC = () => {
             • Switch to another app and back{'\n'}
             • Open Settings or other apps{'\n'}
             • Navigate between different screens
+          </Text>
+        </View>
+
+        <View style={styles.tipCard}>
+          <Text style={styles.tipTitle}>🌙 Background Operation</Text>
+          <Text style={styles.tipText}>
+            With Background Mode enabled:{'\n'}
+            • Text extraction continues when app is minimized{'\n'}
+            • Persistent notification shows extraction is active{'\n'}
+            • Same performance as foreground mode{'\n'}
+            • Tap notification to return to app{'\n'}
+            • Use notification "Stop" button to completely stop
           </Text>
         </View>
       </View>

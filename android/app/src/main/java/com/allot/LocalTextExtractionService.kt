@@ -94,6 +94,13 @@ class LocalTextExtractionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "🚀 LocalTextExtractionService started")
 
+        // Handle stop action from notification
+        if (intent?.action == "STOP_EXTRACTION") {
+            Log.d(TAG, "🛑 Stop requested from notification")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val notification = createNotification()
         startForeground(NOTIFICATION_ID, notification)
 
@@ -103,6 +110,22 @@ class LocalTextExtractionService : Service() {
         // Start processing if not already active
         if (!isProcessingActive) {
             startBackgroundProcessing()
+        }
+
+        // Auto-start extraction loop for background operation
+        if (!isCaptureLoopActive) {
+            Log.d(TAG, "🎯 Auto-starting extraction loop for background operation")
+            
+            // Wait a moment for screen capture service to be ready
+            serviceScope.launch {
+                delay(2000) // Give time for ScreenCaptureService to initialize
+                
+                // Connect to screen capture service
+                connectToScreenCaptureService()
+                
+                // Start the extraction loop
+                startLocalTextExtractionLoop()
+            }
         }
 
         return START_STICKY
@@ -187,6 +210,60 @@ class LocalTextExtractionService : Service() {
 
                 Log.v(TAG, "💓 Service heartbeat - still alive")
             }
+        }
+    }
+
+    /**
+     * Connect to ScreenCaptureService for frame capture
+     */
+    private fun connectToScreenCaptureService() {
+        try {
+            val screenCaptureService = ScreenCaptureService.getInstance()
+            
+            if (screenCaptureService != null) {
+                Log.d(TAG, "✅ Connecting to ScreenCaptureService...")
+                
+                // Disable native backend to prevent sending to Rust backend
+                screenCaptureService.setNativeBackendEnabled(false)
+                Log.d(TAG, "🔧 Disabled native backend - frames will only be processed locally")
+                
+                // Set up callbacks for screen capture integration
+                onTriggerCapture = {
+                    Log.v(TAG, "🎯 Triggering screen capture...")
+                    screenCaptureService.onTriggerCapture?.invoke()
+                }
+                
+                onGetCapturedFrame = {
+                    val frame = screenCaptureService.onGetCapturedFrame?.invoke()
+                    if (frame != null) {
+                        Log.v(TAG, "📸 Got captured frame: ${frame.width}x${frame.height}")
+                        CapturedFrame(
+                            base64 = frame.base64,
+                            width = frame.width,
+                            height = frame.height,
+                            timestamp = frame.timestamp
+                        )
+                    } else {
+                        Log.v(TAG, "⚠️ No frame available from ScreenCaptureService")
+                        null
+                    }
+                }
+                
+                Log.d(TAG, "✅ Screen capture callbacks connected")
+            } else {
+                Log.w(TAG, "⚠️ ScreenCaptureService not available - will retry later")
+                
+                // Retry connection after delay
+                serviceScope.launch {
+                    delay(5000)
+                    if (isProcessingActive) {
+                        connectToScreenCaptureService()
+                    }
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error connecting to ScreenCaptureService: ${e.message}", e)
         }
     }
 
@@ -676,15 +753,32 @@ class LocalTextExtractionService : Service() {
             }
         )
 
+        // Create stop intent
+        val stopIntent = Intent(this, LocalTextExtractionService::class.java)
+        stopIntent.action = "STOP_EXTRACTION"
+        val stopPendingIntent = PendingIntent.getService(
+            this, 0, stopIntent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Allot Local Text Extraction")
-            .setContentText("Extracting text using on-device ML Kit (fast & private)")
+            .setContentTitle("Background Text Extraction Active")
+            .setContentText("Analyzing screen content in background • Tap to open app")
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setShowWhen(false)
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                "Stop",
+                stopPendingIntent
+            )
             .build()
     }
 }
