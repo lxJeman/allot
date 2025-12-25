@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -51,11 +51,32 @@ const LocalTextExtractionTest: React.FC = () => {
   const [recentExtractions, setRecentExtractions] = useState<LocalTextExtractionResult[]>([]);
   const [enableValidation, setEnableValidation] = useState(true);
   const [enableCaching, setEnableCaching] = useState(true);
-  const [captureInterval, setCaptureInterval] = useState(1000); // 1 second
+  const [captureInterval, setCaptureInterval] = useState(1500); // 1.5 seconds default for better performance
   const [autoScroll, setAutoScroll] = useState(false);
+  const [performanceMode, setPerformanceMode] = useState(true);
+
+  // Refs for stable state access in loops
+  const isCapturingRef = useRef(false);
+  const isProcessingRef = useRef(false);
+  const captureLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     loadInitialData();
+  }, []);
+
+  // Sync refs with state
+  useEffect(() => {
+    isCapturingRef.current = isCapturing;
+  }, [isCapturing]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (captureLoopRef.current) {
+        clearInterval(captureLoopRef.current);
+        captureLoopRef.current = null;
+      }
+    };
   }, []);
 
   const loadInitialData = async () => {
@@ -149,6 +170,13 @@ const LocalTextExtractionTest: React.FC = () => {
 
       console.log('🛑 Stopping local text capture...');
 
+      // Stop the loop first
+      if (captureLoopRef.current) {
+        clearInterval(captureLoopRef.current);
+        captureLoopRef.current = null;
+        console.log('✅ Extraction loop stopped');
+      }
+
       // Stop local text extraction service if available
       if (LocalTextExtractionModule) {
         try {
@@ -184,56 +212,95 @@ const LocalTextExtractionTest: React.FC = () => {
   };
 
   const startTextExtractionLoop = () => {
-    const extractionLoop = setInterval(async () => {
-      if (!isCapturing) {
-        clearInterval(extractionLoop);
+    console.log('🔄 Starting text extraction loop...');
+
+    // Clear any existing loop
+    if (captureLoopRef.current) {
+      clearInterval(captureLoopRef.current);
+    }
+
+    const extractionLoop = () => {
+      // Check if we should continue capturing using refs
+      if (!isCapturingRef.current) {
+        console.log('🛑 Loop stopped - capturing disabled');
+        if (captureLoopRef.current) {
+          clearInterval(captureLoopRef.current);
+          captureLoopRef.current = null;
+        }
         return;
       }
 
-      try {
-        await performLocalTextExtraction();
-      } catch (error) {
-        console.error('Error in extraction loop:', error);
+      // Check if we're already processing
+      if (isProcessingRef.current) {
+        console.log('⏳ Skipping frame - still processing previous');
+        return;
       }
-    }, captureInterval);
+
+      // Perform extraction
+      performLocalTextExtraction();
+    };
+
+    // Start the interval
+    captureLoopRef.current = setInterval(extractionLoop, captureInterval);
+    console.log(`✅ Loop started with ${captureInterval}ms interval`);
   };
 
   const performLocalTextExtraction = async () => {
+    // Set processing flag
+    isProcessingRef.current = true;
+
     try {
       const startTime = Date.now();
 
-      // Capture current screen
-      console.log('📸 Capturing screen for local text extraction...');
-      const captureResult = await ScreenCaptureModule.captureNextFrame();
+      console.log('🎯 Triggering capture...');
+
+      // Capture current screen with timeout handling
+      let captureResult;
+      try {
+        captureResult = await ScreenCaptureModule.captureNextFrame();
+      } catch (captureError) {
+        console.log(`⚠️ Capture failed: ${captureError instanceof Error ? captureError.message : 'Unknown error'}`);
+
+        // Try to get the last captured frame as fallback
+        try {
+          console.log('🔄 Trying fallback to last captured frame...');
+          captureResult = await ScreenCaptureModule.getLastCapturedFrame();
+          console.log('✅ Using fallback frame');
+        } catch (fallbackError) {
+          console.log(`❌ Fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`);
+          throw captureError; // Re-throw original error
+        }
+      }
 
       if (!captureResult?.base64) {
         console.log('⏭️ No screen capture available');
         return;
       }
 
-      console.log(`📱 Screen captured: ${captureResult.width}x${captureResult.height}`);
+      console.log(`📸 Screen captured: ${captureResult.width}x${captureResult.height}`);
 
       // Extract text using our local ML system
       const extractionMethod = enableValidation ?
         SmartDetectionModule.testTextExtractionWithValidation :
         SmartDetectionModule.extractText;
 
+      console.log('🔄 Starting text extraction...');
       const extractionResult = await extractionMethod(captureResult.base64);
 
       const totalTime = Date.now() - startTime;
 
       // Log to Rust backend (console logs are forwarded there)
       console.log('');
-      console.log('🔍 ═══════════════════════════════════════');
+      console.log('� ════════s═══════════════════════════════');
       console.log('🔍 LOCAL TEXT EXTRACTION RESULT');
       console.log('🔍 ═══════════════════════════════════════');
       console.log(`📝 Extracted Text: "${extractionResult.extractedText || 'No text detected'}"`);
-      console.log(`📊 Confidence: ${(extractionResult.confidence * 100).toFixed(1)}%`);
+      console.log(`� Confidaence: ${(extractionResult.confidence * 100).toFixed(1)}%`);
       console.log(`📏 Text Density: ${(extractionResult.textDensity * 100).toFixed(1)}%`);
       console.log(`⏱️ ML Processing Time: ${extractionResult.processingTimeMs}ms`);
       console.log(`⏱️ Total Time (capture + ML): ${totalTime}ms`);
       console.log(`🎯 Text Regions: ${extractionResult.textRegions || 0}`);
-      console.log(`💾 Used Cache: ${extractionResult.usedCache ? 'Yes' : 'No'}`);
+      console.log(`� Usead Cache: ${extractionResult.usedCache ? 'Yes' : 'No'}`);
       console.log(`🎯 ROI Detected: ${extractionResult.roiDetected ? 'Yes' : 'No'}`);
 
       if (enableValidation) {
@@ -241,7 +308,7 @@ const LocalTextExtractionTest: React.FC = () => {
         console.log(`📊 Validation Score: ${extractionResult.validationScore ? (extractionResult.validationScore * 100).toFixed(1) + '%' : 'N/A'}`);
         console.log(`🔄 Fallback Used: ${extractionResult.fallbackUsed ? 'Yes' : 'No'}`);
         if (extractionResult.fallbackStrategy && extractionResult.fallbackStrategy !== 'NONE') {
-          console.log(`🛠️ Fallback Strategy: ${extractionResult.fallbackStrategy}`);
+          console.log(`�️ Fa═llback Strategy: ${extractionResult.fallbackStrategy}`);
         }
         console.log(`⭐ High Quality: ${extractionResult.isHighQuality ? 'Yes' : 'No'}`);
       }
@@ -285,6 +352,11 @@ const LocalTextExtractionTest: React.FC = () => {
         // Implement auto-scroll logic here if needed
       }
 
+      console.log(`🔄 Triggering next capture... (Total so far: ${captureStats.totalCaptures})`);
+
+      // Log timestamp to help debug caching issues
+      console.log(`⏰ Current time: ${Date.now()}, Last capture: ${captureResult?.timestamp || 'none'}`);
+
     } catch (error) {
       console.error('❌ Error in local text extraction:', error);
       console.log('❌ ═══════════════════════════════════════');
@@ -292,6 +364,9 @@ const LocalTextExtractionTest: React.FC = () => {
       console.log('❌ ═══════════════════════════════════════');
       console.log(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       console.log('❌ ═══════════════════════════════════════');
+    } finally {
+      // Clear processing flag
+      isProcessingRef.current = false;
     }
   };
 
@@ -390,23 +465,22 @@ const LocalTextExtractionTest: React.FC = () => {
   const generateFinalReport = async () => {
     try {
       // Get comprehensive performance metrics
-      const [cacheStats, metrics, abTestingStats] = await Promise.all([
+      const [cacheStats, metrics] = await Promise.all([
         SmartDetectionModule.getTextExtractionCacheStats?.() || {},
         SmartDetectionModule.getTextExtractionMetrics?.() || {},
-        SmartDetectionModule.getABTestingStats?.() || {},
       ]);
 
       console.log('');
       console.log('📊 ═══════════════════════════════════════');
       console.log('📊 FINAL PERFORMANCE REPORT');
       console.log('📊 ═══════════════════════════════════════');
-      console.log(`📸 Total Captures: ${captureStats.totalCaptures}`);
+      console.log(`� Total Cap═tures: ${captureStats.totalCaptures}`);
       console.log(`✅ Successful Extractions: ${captureStats.successfulExtractions}`);
       console.log(`📈 Success Rate: ${captureStats.totalCaptures > 0 ? ((captureStats.successfulExtractions / captureStats.totalCaptures) * 100).toFixed(1) : 0}%`);
       console.log(`⏱️ Average Total Time: ${captureStats.averageProcessingTime.toFixed(1)}ms`);
       console.log(`📊 Average Confidence: ${captureStats.averageConfidence.toFixed(1)}%`);
-      console.log(`💾 Cache Hit Rate: ${captureStats.cacheHitRate.toFixed(1)}%`);
-      console.log(`📝 Total Text Extracted: ${captureStats.totalTextExtracted} characters`);
+      console.log(`� Cacheg Hit Rate: ${captureStats.cacheHitRate.toFixed(1)}%`);
+      console.log(`�  Total Text Extracted: ${captureStats.totalTextExtracted} characters`);
 
       if (cacheStats.hits !== undefined) {
         console.log(`💾 Cache Performance: ${cacheStats.hits} hits, ${cacheStats.misses} misses`);
@@ -507,8 +581,44 @@ const LocalTextExtractionTest: React.FC = () => {
           />
         </View>
 
+        <View style={styles.configRow}>
+          <Text style={styles.configLabel}>Performance Mode (Faster)</Text>
+          <Switch
+            value={performanceMode}
+            onValueChange={setPerformanceMode}
+            disabled={isCapturing}
+          />
+        </View>
+
+        <View style={styles.configRow}>
+          <Text style={styles.configLabel}>Capture Interval (ms)</Text>
+          <View style={styles.intervalContainer}>
+            <TouchableOpacity
+              style={[styles.intervalButton, captureInterval === 1500 && styles.intervalButtonActive]}
+              onPress={() => setCaptureInterval(1500)}
+              disabled={isCapturing}
+            >
+              <Text style={[styles.intervalButtonText, captureInterval === 1500 && styles.intervalButtonTextActive]}>1.5s</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.intervalButton, captureInterval === 2000 && styles.intervalButtonActive]}
+              onPress={() => setCaptureInterval(2000)}
+              disabled={isCapturing}
+            >
+              <Text style={[styles.intervalButtonText, captureInterval === 2000 && styles.intervalButtonTextActive]}>2s</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.intervalButton, captureInterval === 3000 && styles.intervalButtonActive]}
+              onPress={() => setCaptureInterval(3000)}
+              disabled={isCapturing}
+            >
+              <Text style={[styles.intervalButtonText, captureInterval === 3000 && styles.intervalButtonTextActive]}>3s</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <Text style={styles.configInfo}>
-          Capture Interval: {captureInterval}ms | Validation: {enableValidation ? 'ON' : 'OFF'} | Cache: {enableCaching ? 'ON' : 'OFF'}
+          Capture Interval: {captureInterval}ms | Validation: {enableValidation ? 'ON' : 'OFF'} | Cache: {enableCaching ? 'ON' : 'OFF'} | Performance: {performanceMode ? 'ON' : 'OFF'}
         </Text>
       </View>
 
@@ -611,10 +721,22 @@ const LocalTextExtractionTest: React.FC = () => {
         <Text style={styles.instructionsText}>
           1. <Text style={styles.bold}>Test Single Extraction</Text>: Capture current screen and extract text once{'\n'}
           2. <Text style={styles.bold}>Start Live Capture</Text>: Begin continuous screen capture and text extraction{'\n'}
-          3. <Text style={styles.bold}>Monitor Terminal</Text>: Check Rust backend logs for detailed extraction results{'\n'}
-          4. <Text style={styles.bold}>Performance</Text>: Compare speed vs Google Vision API (should be 4-10x faster){'\n'}
-          5. <Text style={styles.bold}>Quality</Text>: Validation ensures 95%+ accuracy with fallback mechanisms
+          3. <Text style={styles.bold}>Change Screen Content</Text>: Navigate, scroll, or switch apps to see different text extracted{'\n'}
+          4. <Text style={styles.bold}>Monitor Terminal</Text>: Check Rust backend logs for detailed extraction results{'\n'}
+          5. <Text style={styles.bold}>Performance</Text>: Compare speed vs Google Vision API (should be 4-10x faster){'\n'}
+          6. <Text style={styles.bold}>Quality</Text>: Validation ensures 95%+ accuracy with fallback mechanisms
         </Text>
+
+        <View style={styles.tipCard}>
+          <Text style={styles.tipTitle}>💡 Tip for Fresh Screenshots</Text>
+          <Text style={styles.tipText}>
+            The system captures every 2+ seconds. To see different content extracted, try:{'\n'}
+            • Scroll up/down in this app{'\n'}
+            • Switch to another app and back{'\n'}
+            • Open Settings or other apps{'\n'}
+            • Navigate between different screens
+          </Text>
+        </View>
       </View>
     </ScrollView>
   );
@@ -837,6 +959,49 @@ const styles = StyleSheet.create({
   bold: {
     fontWeight: 'bold',
     color: '#333',
+  },
+  intervalContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  intervalButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  intervalButtonActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  intervalButtonText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  intervalButtonTextActive: {
+    color: 'white',
+  },
+  tipCard: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  tipTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1976D2',
+    marginBottom: 8,
+  },
+  tipText: {
+    fontSize: 14,
+    color: '#1565C0',
+    lineHeight: 20,
   },
 });
 

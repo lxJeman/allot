@@ -5,6 +5,9 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import com.facebook.react.bridge.*
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
@@ -20,6 +23,8 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
         const val TAG = "SmartDetectionModule"
     }
 
+    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
     override fun getName(): String {
         return "SmartDetectionModule"
     }
@@ -32,33 +37,73 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
         try {
             val startTime = System.currentTimeMillis()
             
-            // Decode base64 to bitmap to validate it's a real image
+            Log.d(TAG, "🔍 Starting ML Kit text extraction...")
+            
+            // Decode base64 to bitmap
             val bitmap = base64ToBitmap(base64Image)
-            val processingTime = System.currentTimeMillis() - startTime
             
-            // Mock text extraction result
-            val mockText = "Sample extracted text from image ${bitmap.width}x${bitmap.height}"
-            val textDensity = mockText.length.toFloat() / (bitmap.width * bitmap.height) * 10000
+            // Create InputImage for ML Kit
+            val image = InputImage.fromBitmap(bitmap, 0)
             
-            bitmap.recycle()
-            
-            // Return result
-            val resultMap = Arguments.createMap().apply {
-                putString("extractedText", mockText)
-                putDouble("confidence", 0.95)
-                putDouble("textDensity", textDensity.toDouble())
-                putDouble("processingTimeMs", processingTime.toDouble())
-                putInt("textRegions", 3)
-                putBoolean("usedCache", false)
-                putBoolean("roiDetected", false)
-                putBoolean("isHighQuality", true)
-                putBoolean("meetsPerformanceTarget", processingTime < 1000)
-            }
-            
-            promise.resolve(resultMap)
-            
+            // Process with ML Kit Text Recognition
+            textRecognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    try {
+                        val processingTime = System.currentTimeMillis() - startTime
+                        val extractedText = visionText.text
+                        
+                        Log.d(TAG, "✅ ML Kit extraction completed in ${processingTime}ms")
+                        Log.d(TAG, "📝 Extracted text: \"$extractedText\"")
+                        
+                        // Calculate metrics
+                        val textDensity = if (bitmap.width > 0 && bitmap.height > 0) {
+                            extractedText.length.toFloat() / (bitmap.width * bitmap.height) * 10000
+                        } else 0f
+                        
+                        val confidence = if (extractedText.isNotEmpty()) {
+                            // Calculate confidence based on text blocks
+                            val avgConfidence = visionText.textBlocks.mapNotNull { block ->
+                                block.lines.mapNotNull { line ->
+                                    line.elements.mapNotNull { element ->
+                                        element.confidence
+                                    }.average().takeIf { !it.isNaN() }
+                                }.average().takeIf { !it.isNaN() }
+                            }.average()
+                            
+                            if (avgConfidence.isNaN()) 0.8 else avgConfidence
+                        } else 0.0
+                        
+                        bitmap.recycle()
+                        
+                        // Return result
+                        val resultMap = Arguments.createMap().apply {
+                            putString("extractedText", extractedText)
+                            putDouble("confidence", confidence)
+                            putDouble("textDensity", textDensity.toDouble())
+                            putDouble("processingTimeMs", processingTime.toDouble())
+                            putInt("textRegions", visionText.textBlocks.size)
+                            putBoolean("usedCache", false)
+                            putBoolean("roiDetected", visionText.textBlocks.isNotEmpty())
+                            putBoolean("isHighQuality", confidence > 0.7)
+                            putBoolean("meetsPerformanceTarget", processingTime < 1000)
+                        }
+                        
+                        promise.resolve(resultMap)
+                        
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing ML Kit result: ${e.message}", e)
+                        bitmap.recycle()
+                        promise.reject("PROCESSING_ERROR", e.message)
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "ML Kit text recognition failed: ${e.message}", e)
+                    bitmap.recycle()
+                    promise.reject("ML_KIT_ERROR", e.message)
+                }
+                
         } catch (e: Exception) {
-            Log.e(TAG, "Error extracting text: ${e.message}", e)
+            Log.e(TAG, "Error in extractText: ${e.message}", e)
             promise.reject("TEXT_EXTRACTION_ERROR", e.message)
         }
     }
@@ -71,38 +116,83 @@ class SmartDetectionModule(reactContext: ReactApplicationContext) :
         try {
             val startTime = System.currentTimeMillis()
             
-            // Decode base64 to bitmap to validate it's a real image
+            Log.d(TAG, "🔍 Starting ML Kit text extraction with validation...")
+            
+            // Decode base64 to bitmap
             val bitmap = base64ToBitmap(base64Image)
-            val processingTime = System.currentTimeMillis() - startTime
             
-            // Mock text extraction result with validation
-            val mockText = "Validated text extraction from ${bitmap.width}x${bitmap.height} image"
-            val textDensity = mockText.length.toFloat() / (bitmap.width * bitmap.height) * 10000
+            // Create InputImage for ML Kit
+            val image = InputImage.fromBitmap(bitmap, 0)
             
-            bitmap.recycle()
-            
-            // Return result with validation info
-            val resultMap = Arguments.createMap().apply {
-                putString("extractedText", mockText)
-                putDouble("confidence", 0.95)
-                putDouble("textDensity", textDensity.toDouble())
-                putDouble("processingTimeMs", processingTime.toDouble())
-                putInt("textRegions", 3)
-                putBoolean("validationPassed", true)
-                putDouble("validationScore", 0.95)
-                putBoolean("fallbackUsed", false)
-                putString("fallbackStrategy", "NONE")
-                putBoolean("usedCache", false)
-                putBoolean("roiDetected", false)
-                putBoolean("isHighQuality", true)
-                putBoolean("meetsPerformanceTarget", processingTime < 1000)
-            }
-            
-            promise.resolve(resultMap)
-            
+            // Process with ML Kit Text Recognition
+            textRecognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    try {
+                        val processingTime = System.currentTimeMillis() - startTime
+                        val extractedText = visionText.text
+                        
+                        Log.d(TAG, "✅ ML Kit validation extraction completed in ${processingTime}ms")
+                        Log.d(TAG, "📝 Extracted text: \"$extractedText\"")
+                        
+                        // Calculate metrics
+                        val textDensity = if (bitmap.width > 0 && bitmap.height > 0) {
+                            extractedText.length.toFloat() / (bitmap.width * bitmap.height) * 10000
+                        } else 0f
+                        
+                        val confidence = if (extractedText.isNotEmpty()) {
+                            // Calculate confidence based on text blocks
+                            val avgConfidence = visionText.textBlocks.mapNotNull { block ->
+                                block.lines.mapNotNull { line ->
+                                    line.elements.mapNotNull { element ->
+                                        element.confidence
+                                    }.average().takeIf { !it.isNaN() }
+                                }.average().takeIf { !it.isNaN() }
+                            }.average()
+                            
+                            if (avgConfidence.isNaN()) 0.8 else avgConfidence
+                        } else 0.0
+                        
+                        // Validation logic
+                        val validationPassed = extractedText.isNotEmpty() && confidence > 0.5
+                        val validationScore = confidence
+                        val isHighQuality = confidence > 0.7 && extractedText.length > 5
+                        
+                        bitmap.recycle()
+                        
+                        // Return result with validation info
+                        val resultMap = Arguments.createMap().apply {
+                            putString("extractedText", extractedText)
+                            putDouble("confidence", confidence)
+                            putDouble("textDensity", textDensity.toDouble())
+                            putDouble("processingTimeMs", processingTime.toDouble())
+                            putInt("textRegions", visionText.textBlocks.size)
+                            putBoolean("validationPassed", validationPassed)
+                            putDouble("validationScore", validationScore)
+                            putBoolean("fallbackUsed", false)
+                            putString("fallbackStrategy", "NONE")
+                            putBoolean("usedCache", false)
+                            putBoolean("roiDetected", visionText.textBlocks.isNotEmpty())
+                            putBoolean("isHighQuality", isHighQuality)
+                            putBoolean("meetsPerformanceTarget", processingTime < 1000)
+                        }
+                        
+                        promise.resolve(resultMap)
+                        
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing ML Kit validation result: ${e.message}", e)
+                        bitmap.recycle()
+                        promise.reject("PROCESSING_ERROR", e.message)
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "ML Kit validation text recognition failed: ${e.message}", e)
+                    bitmap.recycle()
+                    promise.reject("ML_KIT_ERROR", e.message)
+                }
+                
         } catch (e: Exception) {
-            Log.e(TAG, "Error in text extraction with validation: ${e.message}", e)
-            promise.reject("TEXT_EXTRACTION_VALIDATION_ERROR", e.message)
+            Log.e(TAG, "Error in testTextExtractionWithValidation: ${e.message}", e)
+            promise.reject("TEXT_EXTRACTION_ERROR", e.message)
         }
     }
 

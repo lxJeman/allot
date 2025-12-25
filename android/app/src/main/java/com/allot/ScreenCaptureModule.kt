@@ -41,6 +41,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var captureInterval = 100L // 100ms = 10 FPS
         private var shouldProcessNextFrame = false // Control frame processing
         private var lastCapturedFrame: ScreenCaptureService.CapturedFrame? = null
+        private var pendingCapturePromise: Promise? = null // Store pending promise
     }
 
     override fun getName(): String {
@@ -215,106 +216,58 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             
             Log.d(TAG, "🎯 Requesting next frame capture...")
             
-            // Set flag to process the next available frame
-            shouldProcessNextFrame = true
+            // Check if we have a recent frame (within 500ms for faster response)
+            val frame = lastCapturedFrame
+            val currentTime = System.currentTimeMillis()
             
-            // Force a virtual display refresh by recreating it briefly
-            Thread {
-                try {
-                    val startTime = System.currentTimeMillis()
-                    
-                    // Wait a moment and check if we already have a recent frame
-                    Thread.sleep(50)
-                    
-                    val existingFrame = lastCapturedFrame
-                    if (existingFrame != null && (existingFrame.timestamp >= startTime - 1000)) {
-                        // We have a recent frame, use it
-                        Log.d(TAG, "✅ Using existing recent frame: ${existingFrame.width}x${existingFrame.height}")
-                        
-                        val result = Arguments.createMap().apply {
-                            putString("base64", existingFrame.base64)
-                            putInt("width", existingFrame.width)
-                            putInt("height", existingFrame.height)
-                            putDouble("timestamp", existingFrame.timestamp.toDouble())
-                        }
-                        
-                        promise.resolve(result)
-                        return@Thread
-                    }
-                    
-                    // Force capture by briefly recreating virtual display on main thread
-                    Handler(Looper.getMainLooper()).post {
-                        try {
-                            Log.d(TAG, "🔄 Forcing virtual display refresh...")
-                            
-                            // Temporarily release and recreate virtual display to force refresh
-                            virtualDisplay?.release()
-                            
-                            // Recreate virtual display immediately
-                            val windowManager = reactApplicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                            val displayMetrics = DisplayMetrics()
-                            
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                val display = windowManager.defaultDisplay
-                                display.getRealMetrics(displayMetrics)
-                            } else {
-                                @Suppress("DEPRECATION") 
-                                windowManager.defaultDisplay.getMetrics(displayMetrics)
-                            }
-                            
-                            virtualDisplay = mediaProjection?.createVirtualDisplay(
-                                "AllotScreenCapture",
-                                displayMetrics.widthPixels,
-                                displayMetrics.heightPixels,
-                                displayMetrics.densityDpi,
-                                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                                imageReader?.surface,
-                                null,
-                                null
-                            )
-                            
-                            Log.d(TAG, "✅ Virtual display refreshed")
-                            
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error refreshing virtual display: ${e.message}")
-                        }
-                    }
-                    
-                    // Wait for frame to be captured
-                    var attempts = 0
-                    val maxAttempts = 30 // Wait up to 3 seconds (30 * 100ms)
-                    
-                    while (attempts < maxAttempts) {
-                        Thread.sleep(100) // Wait 100ms
-                        
-                        val frame = lastCapturedFrame
-                        if (frame != null && frame.timestamp >= startTime) {
-                            Log.d(TAG, "✅ Fresh frame captured: ${frame.width}x${frame.height}")
-                            
-                            val result = Arguments.createMap().apply {
-                                putString("base64", frame.base64)
-                                putInt("width", frame.width)
-                                putInt("height", frame.height)
-                                putDouble("timestamp", frame.timestamp.toDouble())
-                            }
-                            
-                            promise.resolve(result)
-                            return@Thread
-                        }
-                        
-                        attempts++
-                    }
-                    
-                    // Timeout - no frame captured
-                    Log.w(TAG, "⚠️ Timeout waiting for frame capture after ${attempts * 100}ms")
-                    Log.w(TAG, "⚠️ Last frame timestamp: ${lastCapturedFrame?.timestamp}, start time: $startTime")
-                    promise.reject("CAPTURE_TIMEOUT", "Failed to capture screen frame within timeout period")
-                    
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error in frame capture thread: ${e.message}", e)
-                    promise.reject("CAPTURE_ERROR", e.message)
+            if (frame != null && (currentTime - frame.timestamp) < 500) {
+                // We have a very recent frame, return it immediately
+                Log.d(TAG, "⚡ Returning recent frame: ${frame.width}x${frame.height}")
+                
+                val result = Arguments.createMap().apply {
+                    putString("base64", frame.base64)
+                    putInt("width", frame.width)
+                    putInt("height", frame.height)
+                    putDouble("timestamp", frame.timestamp.toDouble())
                 }
-            }.start()
+                
+                promise.resolve(result)
+                return
+            }
+            
+            // No recent frame, wait for a new one
+            Log.d(TAG, "⏳ Waiting for fresh frame...")
+            
+            // Check if we already have a pending promise
+            if (pendingCapturePromise != null) {
+                Log.w(TAG, "⚠️ Frame capture already in progress, rejecting previous request")
+                pendingCapturePromise?.reject("CAPTURE_SUPERSEDED", "New capture request superseded this one")
+            }
+            
+            // Store the promise to resolve when frame is captured
+            pendingCapturePromise = promise
+            
+            // Set a timeout to prevent hanging forever
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (pendingCapturePromise == promise) {
+                    Log.w(TAG, "⚠️ Frame capture timeout, using last available frame")
+                    pendingCapturePromise = null
+                    
+                    // Return last frame even if it's old, better than nothing
+                    val lastFrame = lastCapturedFrame
+                    if (lastFrame != null) {
+                        val result = Arguments.createMap().apply {
+                            putString("base64", lastFrame.base64)
+                            putInt("width", lastFrame.width)
+                            putInt("height", lastFrame.height)
+                            putDouble("timestamp", lastFrame.timestamp.toDouble())
+                        }
+                        promise.resolve(result)
+                    } else {
+                        promise.reject("CAPTURE_TIMEOUT", "No frames available")
+                    }
+                }
+            }, 2000) // 2 second timeout
             
         } catch (e: Exception) {
             Log.e(TAG, "Error requesting next frame: ${e.message}", e)
@@ -492,6 +445,22 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
             sendEvent("onScreenCaptured", params)
 
+            // Resolve pending promise if there is one
+            val promise = pendingCapturePromise
+            if (promise != null) {
+                pendingCapturePromise = null
+                
+                val result = Arguments.createMap().apply {
+                    putString("base64", base64)
+                    putInt("width", image.width)
+                    putInt("height", image.height)
+                    putDouble("timestamp", timestamp.toDouble())
+                }
+                
+                Log.d(TAG, "✅ Frame captured and promise resolved: ${image.width}x${image.height}")
+                promise.resolve(result)
+            }
+
             // Cleanup
             if (croppedBitmap != bitmap) {
                 bitmap.recycle()
@@ -499,6 +468,13 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             croppedBitmap.recycle()
         } catch (e: Exception) {
             Log.e(TAG, "Error processing captured image: ${e.message}", e)
+            
+            // Reject pending promise if there's an error
+            val promise = pendingCapturePromise
+            if (promise != null) {
+                pendingCapturePromise = null
+                promise.reject("PROCESSING_ERROR", "Error processing captured image: ${e.message}")
+            }
         }
     }
 
