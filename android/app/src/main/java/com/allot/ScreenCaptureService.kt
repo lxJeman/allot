@@ -172,6 +172,13 @@ class ScreenCaptureService : Service() {
             
             while (isActive && isCaptureLoopActive) {
                 try {
+                    // CHECK: Skip processing if blocking is active
+                    if (isBlockingActive) {
+                        Log.d(TAG, "⏸️  Skipping cycle - content blocking active")
+                        delay(1000) // Check again in 1 second
+                        continue
+                    }
+                    
                     if (enableNativeBackend) {
                         // Only start next cycle if not already processing
                         if (!isProcessingFrame.get()) {
@@ -235,6 +242,12 @@ class ScreenCaptureService : Service() {
             }
 
             try {
+                // CHECK: Skip processing if blocking is active
+                if (isBlockingActive) {
+                    Log.d(TAG, "⏸️  Skipping frame processing - content blocking active")
+                    return@launch
+                }
+                
                 val overallStartTime = System.currentTimeMillis()
                 Log.d(TAG, "🎬 Processing frame started...")
 
@@ -420,7 +433,29 @@ class ScreenCaptureService : Service() {
         }
     }
 
+    // Cooldown management for harmful content detection
+    private var lastHarmfulContentTime = 0L
+    private var isBlockingActive = false // Flag to pause capture during blocking
+    
     private fun handleHarmfulContent(result: AnalysisResult) {
+        val currentTime = System.currentTimeMillis()
+        
+        // Check if we're already blocking content
+        if (isBlockingActive) {
+            Log.w(TAG, "🚫 Already blocking content - ignoring new detection")
+            return
+        }
+        
+        // Check if we detected harmful content too recently (basic cooldown)
+        val timeSinceLastHarmful = currentTime - lastHarmfulContentTime
+        if (timeSinceLastHarmful < 3000) { // 3 second minimum between detections
+            Log.w(TAG, "🕐 Too soon since last harmful content (${timeSinceLastHarmful}ms) - ignoring")
+            return
+        }
+        
+        lastHarmfulContentTime = currentTime
+        isBlockingActive = true // PAUSE SCREEN CAPTURE
+        
         Log.w(TAG, "")
         Log.w(TAG, "🚫 ═══════════════════════════════════════")
         Log.w(TAG, "🚫 HARMFUL CONTENT DETECTED!")
@@ -428,17 +463,19 @@ class ScreenCaptureService : Service() {
         Log.w(TAG, "🏷️  Category: ${result.category}")
         Log.w(TAG, "📊 Confidence: ${(result.confidence * 100).toInt()}%")
         Log.w(TAG, "🎯 Action: ${result.action.uppercase()}")
+        Log.w(TAG, "🚫 ⏸️  SCREEN CAPTURE PAUSED DURING BLOCKING")
         Log.w(TAG, "🚫 ═══════════════════════════════════════")
         Log.w(TAG, "")
 
         // Set a failsafe timeout to reset state in case something goes wrong
         handler.postDelayed(
                 {
-                    Log.w(TAG, "⏰ Failsafe timeout - forcing processing state reset")
+                    Log.w(TAG, "⏰ Failsafe timeout - forcing reset")
                     isProcessingFrame.set(false)
+                    isBlockingActive = false
                 },
-                10000
-        ) // 10 second failsafe
+                10000 // 10 second failsafe
+        )
 
         // Show content blocking (blur + warning overlay)
         handler.post {
@@ -469,30 +506,36 @@ class ScreenCaptureService : Service() {
                                     Log.w(TAG, "⚠️  Auto-scroll failed - will still reset state")
                                 }
 
-                                // Hide overlay after scroll and reset state
+                                // Hide overlay after scroll and resume capture
                                 handler.postDelayed(
                                         {
                                             accessibilityService.removeOverlay()
-
-                                            // Reset processing state to allow new content detection
-                                            isProcessingFrame.set(false)
-
-                                            Log.d(
-                                                    TAG,
-                                                    "🔄 Overlay removed and processing state reset - ready for new content"
+                                            
+                                            // Resume screen capture after additional delay
+                                            handler.postDelayed(
+                                                {
+                                                    isBlockingActive = false // RESUME SCREEN CAPTURE
+                                                    isProcessingFrame.set(false)
+                                                    Log.d(TAG, "✅ Blocking ended - screen capture resumed")
+                                                },
+                                                2000 // Wait 2 more seconds after overlay removal
                                             )
                                         },
-                                        2000
-                                ) // Hide 2 seconds after scroll
+                                        1500 // Hide overlay 1.5 seconds after scroll
+                                )
                             },
-                            1500
-                    ) // Wait 1.5 seconds before scrolling
+                            1500 // Wait 1.5 seconds before scrolling
+                    )
                 } else {
                     Log.e(TAG, "❌ Accessibility service not available!")
                     Log.e(TAG, "   Please enable accessibility service for content blocking")
+                    // Reset blocking if accessibility service not available
+                    isBlockingActive = false
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error handling harmful content: ${e.message}", e)
+                // Reset blocking on error
+                isBlockingActive = false
             }
         }
     }
