@@ -17,9 +17,12 @@ use tracing::{error, info};
 
 #[derive(Deserialize)]
 struct AnalyzeRequest {
-    image: String, // Base64 encoded image
+    // Support both old image format and new text format
+    image: Option<String>, // Base64 encoded image (legacy)
+    extracted_text: Option<String>, // Pre-extracted text (new)
     width: u32,
     height: u32,
+    source: Option<String>, // "local_ml_kit" or "google_vision"
     #[allow(dead_code)]
     timestamp: u64,
 }
@@ -53,11 +56,13 @@ struct AnalysisDetails {
 
 #[derive(Serialize)]
 struct BenchmarkData {
-    ocr_time_ms: u64,
+    ocr_time_ms: u64, // Keep for backward compatibility
+    ml_kit_time_ms: u64, // New field for ML Kit timing
     classification_time_ms: u64,
     total_time_ms: u64,
     text_length: usize,
     cached: bool,
+    source: String, // "google_vision", "local_ml_kit", etc.
     tokens_used: Option<TokenUsage>,
 }
 
@@ -276,9 +281,9 @@ async fn main() {
         .with_ansi(true)
         .init();
 
-    info!("🚀 Starting Allot AI Detection Backend (Phase 3 - Ver 1.0)");
+    info!("🚀 Starting Allot AI Detection Backend (Merged System - Ver 2.0)");
     info!("🧠 Model: openai/gpt-oss-20b");
-    info!("👁️  OCR: Google Vision API");
+    info!("🤖 OCR: Local ML Kit (on-device) + Google Vision API (legacy fallback)");
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -316,37 +321,57 @@ async fn analyze_screen(Json(payload): Json<AnalyzeRequest>) -> Json<AnalyzeResp
     let request_id = uuid::Uuid::new_v4().to_string();
     let total_start = Instant::now();
 
+    let source = payload.source.as_deref().unwrap_or("unknown");
+    
     info!(
-        "📸 [{}] Received screen capture: {}x{}",
-        request_id, payload.width, payload.height
+        "📸 [{}] Received request: {}x{} (source: {})",
+        request_id, payload.width, payload.height, source
     );
 
     let config = Config::from_env();
+    let mut ocr_time = 0u64;
+    let mut ml_kit_time = 0u64;
 
-    // Step 1: Extract text using Google Vision API
-    let ocr_start = Instant::now();
-    let extracted_text = match extract_text_from_image(&config, &payload.image).await {
-        Ok(text) => {
-            let ocr_time = ocr_start.elapsed().as_millis() as u64;
-            info!(
-                "👁️  [{}] OCR complete: {} chars extracted ({}ms)",
-                request_id,
-                text.len(),
-                ocr_time
-            );
-            text
+    // Determine if we have pre-extracted text or need to extract from image
+    let extracted_text = if let Some(text) = payload.extracted_text {
+        // NEW PATH: Pre-extracted text from Local ML Kit
+        info!(
+            "🤖 [{}] Using pre-extracted text from Local ML Kit: {} chars",
+            request_id,
+            text.len()
+        );
+        ml_kit_time = 0; // ML Kit timing is handled in native layer
+        text
+    } else if let Some(image) = payload.image {
+        // LEGACY PATH: Extract text using Google Vision API
+        info!("👁️  [{}] Extracting text using Google Vision API", request_id);
+        
+        let ocr_start = Instant::now();
+        match extract_text_from_image(&config, &image).await {
+            Ok(text) => {
+                ocr_time = ocr_start.elapsed().as_millis() as u64;
+                info!(
+                    "👁️  [{}] OCR complete: {} chars extracted ({}ms)",
+                    request_id,
+                    text.len(),
+                    ocr_time
+                );
+                text
+            }
+            Err(e) => {
+                error!("❌ [{}] OCR failed: {}", request_id, e);
+                return create_error_response(request_id, "OCR failed");
+            }
         }
-        Err(e) => {
-            error!("❌ [{}] OCR failed: {}", request_id, e);
-            return create_error_response(request_id, "OCR failed");
-        }
+    } else {
+        error!("❌ [{}] No image or extracted_text provided", request_id);
+        return create_error_response(request_id, "No image or text provided");
     };
-    let ocr_time = ocr_start.elapsed().as_millis() as u64;
 
     // Check if text is empty
     if extracted_text.trim().is_empty() {
-        info!("ℹ️  [{}] No text detected in image", request_id);
-        return create_safe_response(request_id, ocr_time, 0, total_start);
+        info!("ℹ️  [{}] No text detected", request_id);
+        return create_safe_response(request_id, ocr_time, ml_kit_time, 0, total_start, source);
     }
 
     // Step 2: Filter out overlay text (our own warning messages)
@@ -362,7 +387,7 @@ async fn analyze_screen(Json(payload): Json<AnalyzeRequest>) -> Json<AnalyzeResp
         normalized_text.len()
     );
 
-    // Step 3: Check cache (using text hash)
+    // Step 4: Check cache (using text hash)
     let text_hash = calculate_hash(&normalized_text);
     info!("🔑 [{}] Text hash: {}", request_id, &text_hash[..16]);
 
@@ -394,10 +419,12 @@ async fn analyze_screen(Json(payload): Json<AnalyzeRequest>) -> Json<AnalyzeResp
             timestamp: chrono::Utc::now().timestamp_millis() as u64,
             benchmark: BenchmarkData {
                 ocr_time_ms: ocr_time,
+                ml_kit_time_ms: ml_kit_time,
                 classification_time_ms: 0,
                 total_time_ms: total_time,
                 text_length: normalized_text.len(),
                 cached: true,
+                source: source.to_string(),
                 tokens_used: None,
             },
         });
@@ -455,10 +482,12 @@ async fn analyze_screen(Json(payload): Json<AnalyzeRequest>) -> Json<AnalyzeResp
                 timestamp: chrono::Utc::now().timestamp_millis() as u64,
                 benchmark: BenchmarkData {
                     ocr_time_ms: ocr_time,
+                    ml_kit_time_ms: ml_kit_time,
                     classification_time_ms: classification_time,
                     total_time_ms: total_time,
                     text_length: normalized_text.len(),
                     cached: false,
+                    source: source.to_string(),
                     tokens_used: None,
                 },
             });
@@ -568,10 +597,12 @@ async fn analyze_screen(Json(payload): Json<AnalyzeRequest>) -> Json<AnalyzeResp
         timestamp: chrono::Utc::now().timestamp_millis() as u64,
         benchmark: BenchmarkData {
             ocr_time_ms: ocr_time,
+            ml_kit_time_ms: ml_kit_time,
             classification_time_ms: classification_time,
             total_time_ms: total_time,
             text_length: normalized_text.len(),
             cached: false,
+            source: source.to_string(),
             tokens_used,
         },
     })
@@ -790,10 +821,12 @@ fn create_error_response(request_id: String, error: &str) -> Json<AnalyzeRespons
         timestamp: chrono::Utc::now().timestamp_millis() as u64,
         benchmark: BenchmarkData {
             ocr_time_ms: 0,
+            ml_kit_time_ms: 0,
             classification_time_ms: 0,
             total_time_ms: 0,
             text_length: 0,
             cached: false,
+            source: "error".to_string(),
             tokens_used: None,
         },
     })
@@ -802,8 +835,10 @@ fn create_error_response(request_id: String, error: &str) -> Json<AnalyzeRespons
 fn create_safe_response(
     request_id: String,
     ocr_time: u64,
+    ml_kit_time: u64,
     classification_time: u64,
     total_start: Instant,
+    source: &str,
 ) -> Json<AnalyzeResponse> {
     let total_time = total_start.elapsed().as_millis() as u64;
 
@@ -819,17 +854,19 @@ fn create_safe_response(
                 detected_text: String::new(),
                 content_type: "no_text".to_string(),
                 risk_factors: vec![],
-                recommendation: "No text detected in image".to_string(),
+                recommendation: "No text detected".to_string(),
             },
         },
         processing_time_ms: total_time,
         timestamp: chrono::Utc::now().timestamp_millis() as u64,
         benchmark: BenchmarkData {
             ocr_time_ms: ocr_time,
+            ml_kit_time_ms: ml_kit_time,
             classification_time_ms: classification_time,
             total_time_ms: total_time,
             text_length: 0,
             cached: false,
+            source: source.to_string(),
             tokens_used: None,
         },
     })

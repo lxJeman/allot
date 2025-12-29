@@ -39,7 +39,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var isCapturing = false
         private var captureHandler: Handler? = null
         private var captureRunnable: Runnable? = null
-        private var captureInterval = 100L // 100ms = 10 FPS
+        private var captureInterval = 5000L // 5 seconds = 0.2 FPS (much slower for sequential processing)
         private var shouldProcessNextFrame = false // Control frame processing
         private var lastCapturedFrame: ScreenCaptureService.CapturedFrame? = null
         private var lastCapturedBitmap: android.graphics.Bitmap? = null // HOT PATH: Direct bitmap storage
@@ -255,6 +255,23 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             // Store the promise to resolve when frame is captured
             pendingCapturePromise = promise
 
+            // Trigger frame generation by forcing a display refresh
+            virtualDisplay?.let { display ->
+                try {
+                    val windowManager = reactApplicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                    val displayMetrics = DisplayMetrics()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        windowManager.defaultDisplay.getRealMetrics(displayMetrics)
+                    } else {
+                        @Suppress("DEPRECATION") windowManager.defaultDisplay.getMetrics(displayMetrics)
+                    }
+                    display.resize(displayMetrics.widthPixels, displayMetrics.heightPixels, displayMetrics.densityDpi)
+                    Log.d(TAG, "🔄 Triggered frame generation")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to trigger frame generation: ${e.message}")
+                }
+            }
+
             // Set a timeout to prevent hanging forever
             Handler(Looper.getMainLooper())
                     .postDelayed(
@@ -385,43 +402,22 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
             Log.d(TAG, "✅ VirtualDisplay created successfully")
 
-            // Start a periodic frame refresh mechanism as fallback
-            val refreshHandler = Handler(backgroundHandler.looper)
-            val refreshRunnable =
-                    object : Runnable {
-                        override fun run() {
-                            if (isCapturing) {
-                                try {
-                                    Log.v(TAG, "🔄 Forcing virtual display refresh...")
-                                    // Force a display update by changing a property
-                                    virtualDisplay?.resize(width, height, density)
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Failed to refresh display: ${e.message}")
-                                }
-                                refreshHandler.postDelayed(this, 500) // Every 500ms
-                            }
-                        }
-                    }
-            refreshHandler.post(refreshRunnable)
+            // No automatic refresh - only capture on demand
 
             imageReader?.setOnImageAvailableListener(
                     { reader ->
                         var image: Image? = null
                         try {
-                            Log.d(TAG, "🔥 Image available listener triggered!")
                             image = reader.acquireLatestImage()
                             if (image != null) {
-                                Log.d(TAG, "🔥 Got image: ${image.width}x${image.height}")
-                                // Always process frames when capturing is active
-                                if (isCapturing) {
-                                    Log.d(TAG, "🎯 Processing continuous frame")
-                                    // Process on same thread to ensure image is closed quickly
+                                // Only process frames when explicitly requested or when capturing is active
+                                if (isCapturing && (shouldProcessNextFrame || pendingCapturePromise != null)) {
+                                    Log.d(TAG, "🎯 Processing requested frame")
+                                    shouldProcessNextFrame = false // Reset flag
                                     processImage(image)
                                 } else {
-                                    Log.d(TAG, "🚫 Discarding frame - not capturing")
+                                    Log.v(TAG, "🚫 Discarding frame - not requested")
                                 }
-                            } else {
-                                Log.w(TAG, "⚠️ Image is null!")
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Error in image listener: ${e.message}", e)
@@ -486,7 +482,7 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                             timestamp = timestamp
                     )
 
-            Log.v(TAG, "📸 Continuous frame updated: ${image.width}x${image.height} at $timestamp")
+            Log.v(TAG, "📸 Frame captured: ${image.width}x${image.height} at $timestamp")
 
             // Send to React Native (if available)
             val params =
@@ -585,9 +581,26 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         // Set callback to trigger captures from service
         service.onTriggerCapture = {
             try {
-                // Request next frame
+                // Request next frame and trigger a display refresh to generate new frame
                 shouldProcessNextFrame = true
                 Log.v(TAG, "🎯 Frame requested by service")
+                
+                // Force a display refresh to generate a new frame
+                virtualDisplay?.let { display ->
+                    try {
+                        // Trigger frame generation by forcing a display update
+                        val windowManager = reactApplicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                        val displayMetrics = DisplayMetrics()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            windowManager.defaultDisplay.getRealMetrics(displayMetrics)
+                        } else {
+                            @Suppress("DEPRECATION") windowManager.defaultDisplay.getMetrics(displayMetrics)
+                        }
+                        display.resize(displayMetrics.widthPixels, displayMetrics.heightPixels, displayMetrics.densityDpi)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to trigger frame generation: ${e.message}")
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error triggering capture: ${e.message}")
             }

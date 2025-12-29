@@ -12,14 +12,22 @@ import {
 } from 'react-native';
 import { Colors } from '../constants/theme';
 import { useColorScheme } from '../hooks/use-color-scheme';
+import { aiDetectionService } from '../services/aiDetectionService';
 
-const { ScreenCaptureModule, ScreenPermissionModule } = NativeModules;
+const { ScreenCaptureModule, ScreenPermissionModule, SmartDetectionModule } = NativeModules;
 
 interface CaptureStats {
   totalCaptures: number;
   lastCaptureTime: number;
   isCapturing: boolean;
   captureInterval: number;
+  // New merged system stats
+  totalTextExtractions: number;
+  successfulClassifications: number;
+  averageMLKitTime: number;
+  averageBackendTime: number;
+  lastExtractedText: string;
+  lastClassification: string;
 }
 
 interface CaptureData {
@@ -28,6 +36,24 @@ interface CaptureData {
   width: number;
   height: number;
   timestamp: number;
+}
+
+interface AnalysisResult {
+  category: string;
+  confidence: number;
+  harmful: boolean;
+  action: string;
+  detectedText: string;
+  riskFactors: string[];
+  recommendation: string;
+  benchmark: {
+    mlKitTimeMs: number;
+    classificationTimeMs: number;
+    totalTimeMs: number;
+    textLength: number;
+    cached: boolean;
+    source: string;
+  };
 }
 
 export default function ScreenCaptureScreen() {
@@ -39,6 +65,13 @@ export default function ScreenCaptureScreen() {
     lastCaptureTime: 0,
     isCapturing: false,
     captureInterval: 100, // 100ms default
+    // New merged system stats
+    totalTextExtractions: 0,
+    successfulClassifications: 0,
+    averageMLKitTime: 0,
+    averageBackendTime: 0,
+    lastExtractedText: '',
+    lastClassification: 'none',
   });
 
   const [lastCapture, setLastCapture] = useState<CaptureData | null>(null);
@@ -224,53 +257,90 @@ export default function ScreenCaptureScreen() {
     setIsProcessing(true);
     isProcessingRef.current = true;
     try {
-      console.log(`🚀 [${timestamp}] Sending to server...`);
+      console.log(`🤖 [${timestamp}] Starting Local ML Kit text extraction...`);
 
-      const response = await fetch('http://192.168.100.47:3000/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: captureData.base64,
-          width: captureData.width,
-          height: captureData.height,
-          timestamp: captureData.timestamp,
-        }),
-      });
+      // Step 1: Extract text using Local ML Kit (on-device)
+      const mlKitStartTime = Date.now();
+      const extractionResult = await SmartDetectionModule.extractText(captureData.base64);
+      const mlKitTime = Date.now() - mlKitStartTime;
 
-      const result = await response.json();
-      const processingTime = Date.now() - startTime;
-      const responseTimestamp = new Date().toISOString();
+      const extractedText = extractionResult.extractedText || '';
+      console.log(`📝 [${timestamp}] ML Kit extraction complete (${mlKitTime}ms): "${extractedText.substring(0, 100)}${extractedText.length > 100 ? '...' : ''}"`);
 
-      console.log(`📊 [${responseTimestamp}] Analysis complete (${processingTime}ms):`, result.analysis.category, 'confidence:', result.analysis.confidence);
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        totalTextExtractions: prev.totalTextExtractions + 1,
+        averageMLKitTime: (prev.averageMLKitTime * prev.totalTextExtractions + mlKitTime) / (prev.totalTextExtractions + 1),
+        lastExtractedText: extractedText,
+      }));
 
-      // Handle the analysis result
-      if (result.analysis.harmful && result.analysis.action === 'scroll') {
-        console.log(`⚠️ [${responseTimestamp}] Harmful content detected - would trigger scroll`);
-        // TODO: Trigger scroll action
-      } else if (result.analysis.harmful && result.analysis.action === 'blur') {
-        console.log(`⚠️ [${responseTimestamp}] Harmful content detected - would trigger blur`);
-        // TODO: Trigger blur action
+      // Step 2: Send extracted text to backend for LLM classification (only if we have meaningful text)
+      if (extractedText.trim().length > 3) {
+        console.log(`🧠 [${timestamp}] Sending extracted text to backend for classification...`);
+
+        const backendStartTime = Date.now();
+        const result = await aiDetectionService.detectHarmfulContent(
+          extractedText,
+          captureData.width,
+          captureData.height
+        );
+        const backendTime = Date.now() - backendStartTime;
+        const totalTime = Date.now() - startTime;
+
+        console.log(`📊 [${timestamp}] Complete analysis (${totalTime}ms):`);
+        console.log(`   🏷️ Category: ${result.category}`);
+        console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
+        console.log(`   🚨 Harmful: ${result.harmful ? 'YES' : 'NO'}`);
+        console.log(`   🎯 Action: ${result.action}`);
+        console.log(`   ⏱️ ML Kit: ${mlKitTime}ms | Backend: ${backendTime}ms | Total: ${totalTime}ms`);
+        console.log(`   🚀 Advantage: ${Math.round((800 / mlKitTime) * 10) / 10}x faster than Google Vision API`);
+
+        // Update stats
+        setStats(prev => ({
+          ...prev,
+          successfulClassifications: prev.successfulClassifications + 1,
+          averageBackendTime: (prev.averageBackendTime * prev.successfulClassifications + backendTime) / (prev.successfulClassifications + 1),
+          lastClassification: result.category,
+        }));
+
+        // Handle the analysis result
+        if (result.harmful && result.action === 'scroll') {
+          console.log(`⚠️ [${timestamp}] 🚫 HARMFUL CONTENT DETECTED - SCROLL ACTION`);
+          console.log(`   📝 Text: "${extractedText}"`);
+          console.log(`   🏷️ Category: ${result.category}`);
+          console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
+          // TODO: Trigger scroll action
+        } else if (result.harmful && result.action === 'blur') {
+          console.log(`⚠️ [${timestamp}] 🚫 HARMFUL CONTENT DETECTED - BLUR ACTION`);
+          console.log(`   📝 Text: "${extractedText}"`);
+          console.log(`   🏷️ Category: ${result.category}`);
+          console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
+          // TODO: Trigger blur action
+        } else {
+          console.log(`✅ [${timestamp}] Content safe - continuing`);
+        }
+
       } else {
-        console.log(`✅ [${responseTimestamp}] Content safe - continuing`);
+        console.log(`⏭️ [${timestamp}] No meaningful text extracted (${extractedText.length} chars), skipping backend analysis`);
       }
 
     } catch (error) {
       const errorTimestamp = new Date().toISOString();
-      console.error(`❌ [${errorTimestamp}] Error processing capture:`, error);
-      // Continue loop even if backend fails
+      console.error(`❌ [${errorTimestamp}] Error in merged processing:`, error);
+      // Continue loop even if processing fails
     } finally {
       setIsProcessing(false);
       isProcessingRef.current = false;
 
-      // CRITICAL: Continue the loop after processing
+      // CRITICAL: Continue the loop after processing with PROPER DELAY
       if (captureLoopRef.current) {
         const nextTimestamp = new Date().toISOString();
         console.log(`🔄 [${nextTimestamp}] Triggering next capture...`);
+        // MUCH LONGER delay to create true sequential processing
         setTimeout(() => {
           triggerNextCapture();
-        }, 200); // Small delay to prevent overwhelming
+        }, 5000); // 5 second delay between complete cycles
       }
     }
   }, [triggerNextCapture]);

@@ -1,8 +1,8 @@
 /**
- * AI Detection Service - Phase 3 Ver 1.0
+ * AI Detection Service - Updated for Local ML Kit Integration
  * 
- * Integrates Google Vision API (OCR) + Rust Backend (Groq Classification)
- * for real-time harmful content detection
+ * Now works with Local ML Kit text extraction + Rust Backend (Groq Classification)
+ * for real-time harmful content detection. Google Vision API removed.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,7 +29,7 @@ export interface DetectionResult {
   riskFactors: string[];
   recommendation: string;
   benchmark: {
-    ocrTimeMs: number;
+    mlKitTimeMs: number; // Changed from ocrTimeMs
     classificationTimeMs: number;
     totalTimeMs: number;
     textLength: number;
@@ -54,7 +54,7 @@ const DEFAULT_CONFIG: DetectionConfig = {
   cacheExpiryHours: 24,
 };
 
-const GOOGLE_VISION_API_KEY = 'AIzaSyB_qQtOrwHrBCfq9vayfldfJ0QdDQ0D7Vo';
+// Removed Google Vision API key - no longer needed
 const BACKEND_URL = 'http://192.168.100.47:3000';
 
 // ============================================================================
@@ -87,33 +87,27 @@ class AIDetectionService {
   }
 
   /**
-   * Main detection pipeline
+   * Main detection pipeline - now works with pre-extracted text from Local ML Kit
    */
-  async detectHarmfulContent(base64Image: string): Promise<DetectionResult> {
+  async detectHarmfulContent(extractedText: string, imageWidth?: number, imageHeight?: number): Promise<DetectionResult> {
     const startTime = Date.now();
     this.stats.totalRequests++;
 
-    console.log('🎯 [AI Detection] Starting pipeline...');
+    console.log('🎯 [AI Detection] Starting pipeline with pre-extracted text...');
+    console.log(`📝 [AI Detection] Text length: ${extractedText.length} chars`);
 
     try {
-      // Step 1: Extract text using Google Vision API
-      const ocrStart = Date.now();
-      const extractedText = await this.extractTextFromImage(base64Image);
-      const ocrTime = Date.now() - ocrStart;
-
-      console.log(`👁️  [AI Detection] OCR complete: ${extractedText.length} chars (${ocrTime}ms)`);
-
-      // If no text detected, return safe
+      // If no text provided, return safe
       if (!extractedText.trim()) {
-        console.log('ℹ️  [AI Detection] No text detected - marking as safe');
-        return this.createSafeResult(ocrTime, 0, startTime);
+        console.log('ℹ️  [AI Detection] No text provided - marking as safe');
+        return this.createSafeResult(0, 0, startTime);
       }
 
-      // Step 2: Normalize text
+      // Step 1: Normalize text
       const normalizedText = this.normalizeText(extractedText);
       console.log(`🔄 [AI Detection] Text normalized: ${extractedText.length} -> ${normalizedText.length} chars`);
 
-      // Step 3: Check cache
+      // Step 2: Check cache
       if (this.config.enableCache) {
         const textHash = await sha256(normalizedText);
         const cached = this.getCachedResult(textHash);
@@ -134,20 +128,20 @@ class AIDetectionService {
         console.log(`❌ [AI Detection] Cache miss (${this.stats.cacheMisses}/${this.stats.totalRequests})`);
       }
 
-      // Step 4: Send to backend for classification
+      // Step 3: Send extracted text to backend for classification
       const classificationStart = Date.now();
-      const result = await this.classifyWithBackend(base64Image);
+      const result = await this.classifyTextWithBackend(extractedText, imageWidth, imageHeight);
       const classificationTime = Date.now() - classificationStart;
 
       console.log(`🧠 [AI Detection] Classification: ${result.category} (${result.confidence * 100}%) - ${result.action}`);
 
-      // Step 5: Cache result
+      // Step 4: Cache result
       if (this.config.enableCache) {
         const textHash = await sha256(normalizedText);
         this.cacheResult(textHash, result);
       }
 
-      // Step 6: Apply block list filter
+      // Step 5: Apply block list filter
       const shouldBlock = this.shouldBlockContent(result);
       if (shouldBlock) {
         console.log(`🚫 [AI Detection] Content blocked: ${result.category}`);
@@ -156,7 +150,7 @@ class AIDetectionService {
       const totalTime = Date.now() - startTime;
       this.updateStats(totalTime);
 
-      console.log(`✅ [AI Detection] Pipeline complete: ${totalTime}ms (OCR: ${ocrTime}ms, LLM: ${classificationTime}ms)`);
+      console.log(`✅ [AI Detection] Pipeline complete: ${totalTime}ms (Classification: ${classificationTime}ms)`);
 
       return result;
 
@@ -167,65 +161,48 @@ class AIDetectionService {
   }
 
   /**
-   * Extract text from image using Google Vision API
+   * Legacy method for backward compatibility - now extracts text first using SmartDetectionModule
    */
-  private async extractTextFromImage(base64Image: string): Promise<string> {
-    const url = `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_VISION_API_KEY}`;
+  async detectHarmfulContentFromImage(base64Image: string): Promise<DetectionResult> {
+    console.log('⚠️  [AI Detection] Legacy image method called - extracting text first...');
+    
+    try {
+      // Use SmartDetectionModule to extract text locally
+      const { SmartDetectionModule } = require('react-native').NativeModules;
+      
+      if (!SmartDetectionModule) {
+        throw new Error('SmartDetectionModule not available');
+      }
 
-    const requestBody = {
-      requests: [
-        {
-          image: {
-            content: base64Image,
-          },
-          features: [
-            {
-              type: 'TEXT_DETECTION',
-              maxResults: 1,
-            },
-          ],
-        },
-      ],
-    };
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Google Vision API error: ${response.status} - ${errorText}`);
+      const extractionResult = await SmartDetectionModule.extractText(base64Image);
+      const extractedText = extractionResult.extractedText || '';
+      
+      console.log(`📝 [AI Detection] Text extracted locally: ${extractedText.length} chars`);
+      
+      // Now process the extracted text
+      return this.detectHarmfulContent(extractedText);
+      
+    } catch (error) {
+      console.error('❌ [AI Detection] Failed to extract text locally:', error);
+      throw error;
     }
-
-    const data = await response.json();
-
-    // Extract full text from first annotation
-    const textAnnotations = data.responses?.[0]?.textAnnotations;
-    if (textAnnotations && textAnnotations.length > 0) {
-      return textAnnotations[0].description || '';
-    }
-
-    return '';
   }
 
   /**
-   * Classify text using Rust backend (Groq API)
+   * Classify extracted text using Rust backend (Groq API)
    */
-  private async classifyWithBackend(base64Image: string): Promise<DetectionResult> {
+  private async classifyTextWithBackend(extractedText: string, imageWidth?: number, imageHeight?: number): Promise<DetectionResult> {
     const response = await fetch(`${BACKEND_URL}/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        image: base64Image,
-        width: 720,
-        height: 1600,
+        extracted_text: extractedText, // Send text instead of image
+        width: imageWidth || 720,
+        height: imageHeight || 1600,
         timestamp: Date.now(),
+        source: 'local_ml_kit', // Indicate source
       }),
     });
 
@@ -241,14 +218,14 @@ class AIDetectionService {
       confidence: data.analysis.confidence,
       harmful: data.analysis.harmful,
       action: data.analysis.action,
-      detectedText: data.analysis.details.detected_text,
+      detectedText: data.analysis.details.detected_text || extractedText,
       riskFactors: data.analysis.details.risk_factors,
       recommendation: data.analysis.details.recommendation,
       benchmark: {
-        ocrTimeMs: data.benchmark.ocr_time_ms,
+        mlKitTimeMs: 0, // ML Kit time is handled in native layer
         classificationTimeMs: data.benchmark.classification_time_ms,
         totalTimeMs: data.benchmark.total_time_ms,
-        textLength: data.benchmark.text_length,
+        textLength: extractedText.length,
         cached: data.benchmark.cached,
       },
       timestamp: data.timestamp,
@@ -320,7 +297,7 @@ class AIDetectionService {
   /**
    * Create safe result for no-text scenarios
    */
-  private createSafeResult(ocrTime: number, classificationTime: number, startTime: number): DetectionResult {
+  private createSafeResult(mlKitTime: number, classificationTime: number, startTime: number): DetectionResult {
     return {
       id: `safe-${Date.now()}`,
       category: 'safe_content',
@@ -331,7 +308,7 @@ class AIDetectionService {
       riskFactors: [],
       recommendation: 'No text detected in image',
       benchmark: {
-        ocrTimeMs: ocrTime,
+        mlKitTimeMs: mlKitTime,
         classificationTimeMs: classificationTime,
         totalTimeMs: Date.now() - startTime,
         textLength: 0,

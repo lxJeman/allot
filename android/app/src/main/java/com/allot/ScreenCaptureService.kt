@@ -9,6 +9,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.allot.detection.LocalTextExtractor
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
@@ -35,12 +36,14 @@ class ScreenCaptureService : Service() {
     private var isProcessingActive = false
     private var isCaptureLoopActive = false
     private val handler = Handler(Looper.getMainLooper())
-    private var captureInterval = 100L // 100ms = 10 FPS
     private val isProcessingFrame = AtomicBoolean(false)
 
-    // Backend configuration
+    // Backend configuration - KEEP GROQ BACKEND!
     private var backendUrl = "http://192.168.100.47:3000/analyze"
     private var enableNativeBackend = true
+    
+    // Local text extraction integration (REPLACES Google Vision API)
+    private val localTextExtractor by lazy { com.allot.detection.LocalTextExtractor() }
 
     // Callback for capture events (set by ScreenCaptureModule)
     var onCaptureCallback: ((String, Int, Int, Long) -> Unit)? = null
@@ -146,85 +149,200 @@ class ScreenCaptureService : Service() {
     }
 
     fun startCaptureLoop() {
+        // Check if LocalTextExtractionService is running - if so, don't start our own loop
+        if (com.allot.LocalTextExtractionService.isRunning()) {
+            Log.w(TAG, "🛑 LocalTextExtractionService is running - ScreenCaptureService will NOT start its own loop")
+            Log.w(TAG, "   LocalTextExtractionService will handle all processing to prevent conflicts")
+            return
+        }
+        
         if (isCaptureLoopActive) {
             Log.w(TAG, "⚠️ Capture loop already active")
             return
         }
 
         isCaptureLoopActive = true
-        Log.d(TAG, "🎬 Starting native capture loop (${captureInterval}ms interval)")
-        Log.d(TAG, "🌐 Native backend: ${if (enableNativeBackend) "ENABLED" else "DISABLED"}")
+        Log.d(TAG, "🎬 Starting SEQUENTIAL processing loop (no fixed interval)")
+        Log.d(TAG, "🌐 Backend: ${if (enableNativeBackend) "GROQ LLM ENABLED" else "DISABLED"}")
+        Log.d(TAG, "🤖 Text Extraction: LOCAL ML KIT (replaces Google Vision API)")
 
-        // Native capture loop running in service scope
+        // TRULY SEQUENTIAL PROCESSING: One complete cycle at a time
         serviceScope.launch {
+            Log.d(TAG, "🔄 Starting TRULY sequential processing - one cycle at a time")
+            
             while (isActive && isCaptureLoopActive) {
                 try {
                     if (enableNativeBackend) {
-                        // Native backend mode: capture and send directly
+                        // Only start next cycle if not already processing
                         if (!isProcessingFrame.get()) {
+                            val cycleStartTime = System.currentTimeMillis()
+                            Log.d(TAG, "")
+                            Log.d(TAG, "🔄 ═══ STARTING NEW CYCLE ═══")
+                            
+                            // Process one complete frame
                             processFrameNatively()
+                            
+                            // WAIT for this cycle to COMPLETELY finish
+                            var waitTime = 0L
+                            while (isProcessingFrame.get() && isCaptureLoopActive) {
+                                delay(200) // Check every 200ms
+                                waitTime += 200
+                                if (waitTime > 30000) { // 30 second timeout
+                                    Log.w(TAG, "⚠️ Cycle timeout - forcing reset")
+                                    isProcessingFrame.set(false)
+                                    break
+                                }
+                            }
+                            
+                            val cycleTime = System.currentTimeMillis() - cycleStartTime
+                            Log.d(TAG, "✅ ═══ CYCLE COMPLETE (${cycleTime}ms) ═══")
+                            Log.d(TAG, "")
+                            
+                            // LONGER delay between cycles to prevent overwhelming
+                            val delayTime = if (cycleTime < 2000) {
+                                3000L // If cycle was fast, wait 3 seconds
+                            } else {
+                                2000L // If cycle was slow, wait 2 seconds
+                            }
+                            
+                            Log.d(TAG, "⏳ Waiting ${delayTime}ms before next cycle...")
+                            delay(delayTime)
+                        } else {
+                            // If somehow still processing, wait longer
+                            Log.w(TAG, "⚠️ Still processing previous cycle, waiting...")
+                            delay(1000)
                         }
                     } else {
-                        // React Native mode: just trigger capture
+                        // React Native mode: much slower
                         handler.post { onTriggerCapture?.invoke() }
+                        delay(5000) // 5 second delay in React Native mode
                     }
-
-                    // Wait for next interval
-                    delay(captureInterval)
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error in capture loop: ${e.message}")
+                    Log.e(TAG, "❌ Error in sequential processing loop: ${e.message}")
+                    isProcessingFrame.set(false) // Reset on error
+                    delay(3000) // Wait 3 seconds before retry on error
                 }
             }
-            Log.d(TAG, "⏹️ Native capture loop stopped")
+            Log.d(TAG, "⏹️ Sequential processing loop stopped")
         }
     }
 
     private fun processFrameNatively() {
         serviceScope.launch(Dispatchers.IO) {
             if (!isProcessingFrame.compareAndSet(false, true)) {
-                return@launch // Already processing
+                Log.w(TAG, "⚠️ Frame processing already in progress - skipping")
+                return@launch
             }
 
             try {
-                // Trigger capture and get frame
-                val frame =
-                        withContext(Dispatchers.Main) {
-                            onTriggerCapture?.invoke()
-                            delay(50) // Give time for capture
-                            onGetCapturedFrame?.invoke()
+                val overallStartTime = System.currentTimeMillis()
+                Log.d(TAG, "🎬 Processing frame started...")
+
+                // 🔥 HOT PATH: Try to get direct bitmap first (faster)
+                var bitmap: android.graphics.Bitmap? = null
+                var frame: CapturedFrame? = null
+
+                try {
+                    bitmap = onGetCapturedBitmap?.invoke()
+                    if (bitmap != null && !bitmap.isRecycled) {
+                        Log.d(TAG, "🔥 HOT PATH: Direct bitmap captured: ${bitmap.width}x${bitmap.height}")
+                    } else {
+                        Log.v(TAG, "⚠️ HOT PATH: No direct bitmap available, trying cold path...")
+                        bitmap = null
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚠️ HOT PATH failed: ${e.message}")
+                    bitmap = null
+                }
+
+                // ❄️ COLD PATH: Fallback to base64 frame if hot path failed
+                if (bitmap == null) {
+                    Log.d(TAG, "❄️ COLD PATH: Triggering frame capture...")
+                    frame = withContext(Dispatchers.Main) {
+                        onTriggerCapture?.invoke()
+                        delay(100) // Give more time for capture
+                        onGetCapturedFrame?.invoke()
+                    }
+
+                    if (frame != null) {
+                        Log.d(TAG, "❄️ COLD PATH: Frame captured: ${frame.width}x${frame.height}")
+                        // Convert base64 to bitmap
+                        bitmap = base64ToBitmap(frame.base64)
+                    } else {
+                        Log.w(TAG, "❄️ COLD PATH: No frame available")
+                    }
+                }
+
+                if (bitmap != null && !bitmap.isRecycled) {
+                    // Extract text using local ML Kit
+                    Log.d(TAG, "🤖 Starting ML Kit text extraction...")
+                    val mlStartTime = System.currentTimeMillis()
+                    val textResult = localTextExtractor.extractText(bitmap)
+                    val mlTime = System.currentTimeMillis() - mlStartTime
+
+                    Log.d(TAG, "🔍 Local ML extraction complete:")
+                    Log.d(TAG, "   📝 Text: '${textResult.extractedText.take(100)}${if (textResult.extractedText.length > 100) "..." else ""}'")
+                    Log.d(TAG, "   📊 Confidence: ${(textResult.confidence * 100).toInt()}%")
+                    Log.d(TAG, "   ⏱️ ML Time: ${mlTime}ms")
+
+                    // Send extracted text to GROQ BACKEND for LLM analysis
+                    if (textResult.extractedText.isNotBlank() && textResult.extractedText.length > 3) {
+                        Log.d(TAG, "🌐 Sending text to Groq backend...")
+                        val backendStartTime = System.currentTimeMillis()
+                        val result = sendTextToBackend(textResult.extractedText, frame?.width ?: bitmap.width, frame?.height ?: bitmap.height)
+                        val backendTime = System.currentTimeMillis() - backendStartTime
+                        val totalTime = System.currentTimeMillis() - overallStartTime
+
+                        if (result != null) {
+                            Log.d(TAG, "")
+                            Log.d(TAG, "📊 ═══════════════════════════════════════")
+                            Log.d(TAG, "📊 HYBRID ANALYSIS RESULT")
+                            Log.d(TAG, "📊 ═══════════════════════════════════════")
+                            Log.d(TAG, "📝 Extracted Text: '${textResult.extractedText}'")
+                            Log.d(TAG, "🏷️ Category: ${result.category}")
+                            Log.d(TAG, "📊 Confidence: ${(result.confidence * 100).toInt()}%")
+                            Log.d(TAG, "🚨 Harmful: ${if (result.harmful) "YES" else "NO"}")
+                            Log.d(TAG, "🎯 Action: ${result.action}")
+                            Log.d(TAG, "⏱️ ML Kit Time: ${mlTime}ms")
+                            Log.d(TAG, "⏱️ Groq Backend Time: ${backendTime}ms")
+                            Log.d(TAG, "⏱️ Total Time: ${totalTime}ms")
+                            Log.d(TAG, "🚀 Path: ${if (frame == null) "HOT (direct bitmap)" else "COLD (base64 fallback)"}")
+                            Log.d(TAG, "🌐 Processing: LOCAL ML Kit + GROQ LLM Backend")
+                            Log.d(TAG, "📊 ═══════════════════════════════════════")
+                            Log.d(TAG, "")
+
+                            // Handle harmful content
+                            if (result.harmful) {
+                                handleHarmfulContent(result)
+                            }
+                        } else {
+                            Log.w(TAG, "⚠️ No result from backend")
                         }
+                    } else {
+                        Log.v(TAG, "⏭️ No meaningful text extracted (${textResult.extractedText.length} chars), continuing...")
+                    }
 
-                if (frame != null) {
-                    Log.d(TAG, "📸 Frame captured: ${frame.width}x${frame.height}")
-
-                    // Send to backend
-                    val startTime = System.currentTimeMillis()
-                    val result = sendFrameToBackend(frame)
-                    val duration = System.currentTimeMillis() - startTime
-
-                    if (result != null) {
-                        Log.d(
-                                TAG,
-                                "📊 Analysis complete (${duration}ms): ${result.category} (${result.confidence})"
-                        )
-
-                        // Handle harmful content
-                        if (result.harmful) {
-                            handleHarmfulContent(result)
-                        }
+                    // Clean up bitmap if we created it from base64
+                    if (frame != null) {
+                        bitmap.recycle()
                     }
                 } else {
-                    Log.v(TAG, "⏭️ No frame available")
+                    Log.w(TAG, "⏭️ No frame/bitmap available for processing")
                 }
+                
+                val totalProcessingTime = System.currentTimeMillis() - overallStartTime
+                Log.d(TAG, "✅ Frame processing completed in ${totalProcessingTime}ms")
+                
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error processing frame: ${e.message}")
+                Log.e(TAG, "❌ Error processing frame: ${e.message}", e)
             } finally {
                 isProcessingFrame.set(false)
+                Log.d(TAG, "🏁 Frame processing flag cleared")
             }
         }
     }
 
-    private suspend fun sendFrameToBackend(frame: CapturedFrame): AnalysisResult? {
+    private suspend fun sendTextToBackend(extractedText: String, width: Int, height: Int): AnalysisResult? {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL(backendUrl)
@@ -236,13 +354,14 @@ class ScreenCaptureService : Service() {
                 connection.connectTimeout = 10000 // 10 seconds
                 connection.readTimeout = 30000 // 30 seconds
 
-                // Create JSON payload
+                // Create JSON payload with extracted text instead of image
                 val payload =
                         JSONObject().apply {
-                            put("image", frame.base64)
-                            put("width", frame.width)
-                            put("height", frame.height)
-                            put("timestamp", frame.timestamp)
+                            put("extracted_text", extractedText) // Send text instead of image
+                            put("width", width)
+                            put("height", height)
+                            put("timestamp", System.currentTimeMillis())
+                            put("source", "local_ml_kit") // Indicate source
                         }
 
                 // Send request
@@ -287,6 +406,17 @@ class ScreenCaptureService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to parse response: ${e.message}")
             null
+        }
+    }
+
+    private fun base64ToBitmap(base64String: String): android.graphics.Bitmap {
+        return try {
+            val decodedBytes = android.util.Base64.decode(base64String, android.util.Base64.DEFAULT)
+            android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                ?: throw IllegalArgumentException("Failed to decode bitmap from base64")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error converting base64 to bitmap: ${e.message}")
+            throw e
         }
     }
 
@@ -381,17 +511,12 @@ class ScreenCaptureService : Service() {
 
     fun setNativeBackendEnabled(enabled: Boolean) {
         enableNativeBackend = enabled
-        Log.d(TAG, "🌐 Native backend: ${if (enabled) "ENABLED" else "DISABLED"}")
+        Log.d(TAG, "🌐 Groq Backend: ${if (enabled) "ENABLED" else "DISABLED"}")
     }
 
     fun stopCaptureLoop() {
         isCaptureLoopActive = false
-        Log.d(TAG, "🛑 Stopping native capture loop")
-    }
-
-    fun setCaptureInterval(intervalMs: Long) {
-        captureInterval = intervalMs
-        Log.d(TAG, "⏱️ Capture interval set to ${intervalMs}ms")
+        Log.d(TAG, "🛑 Stopping sequential processing loop")
     }
 
     fun notifyCapture(base64: String, width: Int, height: Int, timestamp: Long) {
@@ -434,8 +559,8 @@ class ScreenCaptureService : Service() {
                 )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Allot Screen Analysis")
-                .setContentText("Analyzing screen content for harmful material")
+                .setContentTitle("Allot Hybrid Analysis")
+                .setContentText("Local ML Kit + Groq LLM • Privacy-enhanced")
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
