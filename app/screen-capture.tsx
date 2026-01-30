@@ -14,7 +14,7 @@ import { Colors } from '../constants/theme';
 import { useColorScheme } from '../hooks/use-color-scheme';
 import { aiDetectionService } from '../services/aiDetectionService';
 
-const { ScreenCaptureModule, ScreenPermissionModule, SmartDetectionModule } = NativeModules;
+const { ScreenCaptureModule, ScreenPermissionModule, SmartDetectionModule, AppDetectionModule } = NativeModules;
 
 interface CaptureStats {
   totalCaptures: number;
@@ -28,6 +28,12 @@ interface CaptureStats {
   averageBackendTime: number;
   lastExtractedText: string;
   lastClassification: string;
+  // App detection stats
+  currentApp: string;
+  currentAppName: string;
+  isMonitoredApp: boolean;
+  appChangeCount: number;
+  capturesSkipped: number;
 }
 
 interface CaptureData {
@@ -57,6 +63,7 @@ interface AnalysisResult {
 }
 
 export default function ScreenCaptureScreen() {
+  console.log('🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -72,6 +79,12 @@ export default function ScreenCaptureScreen() {
     averageBackendTime: 0,
     lastExtractedText: '',
     lastClassification: 'none',
+    // App detection stats
+    currentApp: '',
+    currentAppName: 'Unknown',
+    isMonitoredApp: false,
+    appChangeCount: 0,
+    capturesSkipped: 0,
   });
 
   const [lastCapture, setLastCapture] = useState<CaptureData | null>(null);
@@ -80,12 +93,16 @@ export default function ScreenCaptureScreen() {
   const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [captureLoop, setCaptureLoop] = useState(false);
+  const [smartCaptureEnabled, setSmartCaptureEnabled] = useState(true); // New: Smart app-based capture
   const isProcessingRef = useRef(false);
   const captureLoopRef = useRef(false);
 
   useEffect(() => {
     // Check if already capturing
     checkCaptureStatus();
+    
+    // Initialize app detection
+    initializeAppDetection();
 
     // Listen for permission results (this doesn't depend on captureLoop)
     const permissionListener = DeviceEventEmitter.addListener('onScreenCapturePermissionResult', (result) => {
@@ -96,18 +113,44 @@ export default function ScreenCaptureScreen() {
       }
     });
 
+    // Listen for app changes from AppDetectionModule
+    const appChangeListener = DeviceEventEmitter.addListener('onAppChanged', (event) => {
+      const timestamp = new Date().toISOString();
+      console.log(`📱 [${timestamp}] App changed:`, event);
+      
+      setStats(prev => ({
+        ...prev,
+        currentApp: event.packageName,
+        currentAppName: event.appName,
+        isMonitoredApp: event.isMonitored,
+        appChangeCount: prev.appChangeCount + 1,
+      }));
+
+      if (event.isMonitored) {
+        console.log(`🎯 [${timestamp}] ENTERED MONITORED APP: ${event.appName}`);
+        console.log(`   → Screen capture should be ACTIVE`);
+      } else {
+        console.log(`📱 [${timestamp}] Left monitored app, now in: ${event.appName}`);
+        console.log(`   → Screen capture should be PAUSED`);
+      }
+    });
+
     return () => {
       permissionListener.remove();
+      appChangeListener.remove();
     };
   }, []);
 
   // Separate useEffect for capture listener that depends on captureLoop
   useEffect(() => {
+    console.log('🎧 Creating capture listener - this should only happen once per mount');
+    
     // Listen for screen capture events - recreate when captureLoop changes
     const captureListener = DeviceEventEmitter.addListener('onScreenCaptured', async (data: CaptureData) => {
       const timestamp = new Date().toISOString();
       console.log(`📸 [${timestamp}] Screen captured:`, data.width + 'x' + data.height);
       console.log(`🔍 [${timestamp}] captureLoop state:`, captureLoop);
+      console.log(`🔍 [${timestamp}] captureLoopRef.current:`, captureLoopRef.current);
 
       setLastCapture(data);
       setStats(prev => ({
@@ -116,9 +159,28 @@ export default function ScreenCaptureScreen() {
         lastCaptureTime: data.timestamp,
       }));
 
-      // ALWAYS process captures automatically when loop is active
+      // Check if we should process this capture based on current app
+      const shouldProcess = await shouldProcessCapture();
+      
+      if (!shouldProcess) {
+        const skipTimestamp = new Date().toISOString();
+        console.log(`⏭️ [${skipTimestamp}] Skipping capture - not in monitored app (${stats.currentAppName})`);
+        console.log(`🚫 [${skipTimestamp}] CRITICAL: This capture should NOT reach processCapture`);
+        setStats(prev => ({ ...prev, capturesSkipped: prev.capturesSkipped + 1 }));
+        
+        // Continue loop but skip processing
+        if (captureLoopRef.current) {
+          setTimeout(() => {
+            triggerNextCapture();
+          }, 1000); // Shorter delay when skipping
+        }
+        return;
+      }
+
+      // PROCESS captures automatically when loop is active AND in monitored app
       if (captureLoopRef.current && !isProcessingRef.current) {
-        console.log(`🔄 [${timestamp}] Starting automatic processing...`);
+        console.log(`🔄 [${timestamp}] Starting automatic processing for monitored app...`);
+        console.log(`✅ [${timestamp}] CALLING processCapture - this should be the ONLY path to backend`);
         processCapture(data); // Don't await here to prevent blocking
       } else if (isProcessingRef.current) {
         console.log(`⏳ [${timestamp}] Already processing, skipping this capture`);
@@ -128,6 +190,7 @@ export default function ScreenCaptureScreen() {
     });
 
     return () => {
+      console.log('🗑️ Cleaning up capture listener');
       captureListener.remove();
     };
   }, []); // Stable listener using refs
@@ -138,6 +201,117 @@ export default function ScreenCaptureScreen() {
       setStats(prev => ({ ...prev, isCapturing }));
     } catch (error) {
       console.error('Error checking capture status:', error);
+    }
+  };
+
+  const initializeAppDetection = async () => {
+    try {
+      console.log('🔍 Initializing app detection...');
+      
+      // First check if accessibility service is enabled
+      const isServiceEnabled = await AppDetectionModule.isAccessibilityServiceEnabled();
+      console.log('🔧 Accessibility service enabled:', isServiceEnabled);
+      
+      if (!isServiceEnabled) {
+        console.warn('⚠️ Accessibility service is not enabled - app detection will not work');
+        console.warn('⚠️ Smart capture will be disabled to prevent false processing');
+        
+        // Disable smart capture when service is not available
+        setSmartCaptureEnabled(false);
+        
+        setStats(prev => ({
+          ...prev,
+          currentApp: 'service_disabled',
+          currentAppName: 'Service Disabled',
+          isMonitoredApp: false,
+        }));
+        
+        return;
+      }
+      
+      // Get current app status
+      const currentAppResult = await AppDetectionModule.getCurrentApp();
+      console.log('📱 Current app on startup:', currentAppResult);
+      
+      setStats(prev => ({
+        ...prev,
+        currentApp: currentAppResult.packageName || 'unknown',
+        currentAppName: currentAppResult.appName || 'Unknown',
+        isMonitoredApp: currentAppResult.isMonitored || false,
+      }));
+
+      console.log('✅ App detection initialized successfully');
+      
+    } catch (error) {
+      console.error('❌ Error initializing app detection:', error);
+      
+      // Disable smart capture on error to prevent false processing
+      setSmartCaptureEnabled(false);
+      console.warn('⚠️ Smart capture disabled due to app detection error');
+    }
+  };
+
+  const shouldProcessCapture = async (): Promise<boolean> => {
+    if (!smartCaptureEnabled) {
+      console.log('🔄 Smart capture disabled - processing all captures');
+      return true; // Always process if smart capture is disabled
+    }
+
+    try {
+      // Get real-time app status
+      const isMonitored = await AppDetectionModule.isMonitoredApp();
+      const currentAppResult = await AppDetectionModule.getCurrentApp();
+      
+      console.log(`🤔 shouldProcessCapture check:`);
+      console.log(`   App: ${currentAppResult.appName} (${currentAppResult.packageName})`);
+      console.log(`   Monitored: ${isMonitored}`);
+      console.log(`   Smart Capture: ${smartCaptureEnabled}`);
+      console.log(`   Service Available: ${currentAppResult.serviceAvailable !== false}`);
+      console.log(`   Decision: ${isMonitored ? 'PROCESS' : 'SKIP'}`);
+      
+      // Update stats with current app info
+      setStats(prev => ({
+        ...prev,
+        currentApp: currentAppResult.packageName || 'unknown',
+        currentAppName: currentAppResult.appName || 'Unknown',
+        isMonitoredApp: isMonitored,
+      }));
+      
+      return isMonitored;
+    } catch (error) {
+      console.error('❌ Error checking if app is monitored:', error);
+      return false; // Err on the side of not processing
+    }
+  };
+
+  const openAccessibilitySettings = async () => {
+    try {
+      console.log('⚙️ Opening accessibility settings...');
+      const success = await AppDetectionModule.openAccessibilitySettings();
+      
+      if (success) {
+        Alert.alert(
+          'Enable App Detection',
+          'Please find "Allot" in the accessibility services list and enable it.\n\nThis allows the app to detect which social media apps you\'re using for smart capture.',
+          [
+            { 
+              text: 'I\'ve Enabled It', 
+              onPress: () => {
+                // Re-initialize app detection after user enables service
+                setTimeout(() => {
+                  initializeAppDetection();
+                }, 1000);
+              }
+            },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else {
+        Alert.alert('Error', 'Could not open accessibility settings. Please go to Settings > Accessibility manually.');
+      }
+    } catch (error) {
+      console.error('❌ Error opening accessibility settings:', error);
+      Alert.alert('Error', 'Could not open accessibility settings.');
     }
   };
 
@@ -245,10 +419,47 @@ export default function ScreenCaptureScreen() {
   }, []);
 
   const processCapture = useCallback(async (captureData: CaptureData): Promise<void> => {
+    const entryTimestamp = new Date().toISOString();
+    console.log(`🚪 [${entryTimestamp}] processCapture ENTRY - smartCaptureEnabled: ${smartCaptureEnabled}`);
+    
+    // Add stack trace to see where this is being called from
+    console.log(`📍 [${entryTimestamp}] processCapture called from:`, new Error().stack?.split('\n')[2]?.trim());
+    
     if (isProcessingRef.current) {
       const timestamp = new Date().toISOString();
       console.log(`⏳ [${timestamp}] Already processing, skipping capture`);
       return;
+    }
+
+    // CRITICAL: Double-check if we should process this capture
+    if (smartCaptureEnabled) {
+      try {
+        const isMonitored = await AppDetectionModule.isMonitoredApp();
+        const currentAppResult = await AppDetectionModule.getCurrentApp();
+        
+        console.log(`🚫 [${entryTimestamp}] CRITICAL DOUBLE-CHECK:`);
+        console.log(`   Smart Capture: ${smartCaptureEnabled}`);
+        console.log(`   Current App: ${currentAppResult.appName}`);
+        console.log(`   Is Monitored: ${isMonitored}`);
+        
+        if (!isMonitored) {
+          console.log(`🚫 [${entryTimestamp}] BLOCKED: Smart capture enabled but not in monitored app - aborting processing`);
+          console.log(`🚫 [${entryTimestamp}] THIS SHOULD PREVENT ALL ML KIT AND BACKEND CALLS`);
+          
+          // Continue loop but skip processing
+          if (captureLoopRef.current) {
+            setTimeout(() => {
+              triggerNextCapture();
+            }, 1000);
+          }
+          return;
+        } else {
+          console.log(`✅ [${entryTimestamp}] PROCEEDING: In monitored app ${currentAppResult.appName}`);
+        }
+      } catch (error) {
+        console.error(`❌ [${entryTimestamp}] Error in processCapture app check:`, error);
+        return;
+      }
     }
 
     const startTime = Date.now();
@@ -258,6 +469,8 @@ export default function ScreenCaptureScreen() {
     isProcessingRef.current = true;
     try {
       console.log(`🤖 [${timestamp}] Starting Local ML Kit text extraction...`);
+      console.log(`🤖 [${timestamp}] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS`);
+      console.log(`🤖 [${timestamp}] If you see this for non-monitored apps, there's a bug!`);
 
       // Step 1: Extract text using Local ML Kit (on-device)
       const mlKitStartTime = Date.now();
@@ -278,6 +491,8 @@ export default function ScreenCaptureScreen() {
       // Step 2: Send extracted text to backend for LLM classification (only if we have meaningful text)
       if (extractedText.trim().length > 3) {
         console.log(`🧠 [${timestamp}] Sending extracted text to backend for classification...`);
+        console.log(`🧠 [${timestamp}] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS`);
+        console.log(`🧠 [${timestamp}] If you see this for non-monitored apps, there's a critical bug!`);
 
         const backendStartTime = Date.now();
         const result = await aiDetectionService.detectHarmfulContent(
@@ -343,7 +558,7 @@ export default function ScreenCaptureScreen() {
         }, 5000); // 5 second delay between complete cycles
       }
     }
-  }, [triggerNextCapture]);
+  }, [triggerNextCapture, smartCaptureEnabled]);
 
   const sendToBackend = async () => {
     if (!lastCapture) {
@@ -351,9 +566,35 @@ export default function ScreenCaptureScreen() {
       return;
     }
 
+    // Check if smart capture is enabled and we're not in a monitored app
+    if (smartCaptureEnabled) {
+      try {
+        const isMonitored = await AppDetectionModule.isMonitoredApp();
+        if (!isMonitored) {
+          Alert.alert(
+            'Smart Capture Enabled', 
+            'Smart Capture is ON and you\'re not in a monitored app. This would normally be skipped.\n\nDo you want to send anyway?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Send Anyway', onPress: () => performBackendSend() }
+            ]
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking app status for manual send:', error);
+      }
+    }
+
+    performBackendSend();
+  };
+
+  const performBackendSend = async () => {
+    if (!lastCapture) return;
+
     try {
       console.log('🚀 Manual send to backend...');
-      const response = await fetch('http://192.168.100.47:3000/analyze', {
+      const response = await fetch('http://192.168.100.55:3000/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -407,9 +648,14 @@ export default function ScreenCaptureScreen() {
           color={Colors[colorScheme ?? 'light'].tint}
         />
         <StatusCard
-          title="Interval"
-          value={`${stats.captureInterval}ms`}
-          color={isDark ? '#ECEDEE' : '#11181C'}
+          title="Current App"
+          value={stats.currentAppName}
+          color={stats.isMonitoredApp ? '#4CAF50' : '#FF9800'}
+        />
+        <StatusCard
+          title="App Status"
+          value={stats.isMonitoredApp ? 'MONITORED' : 'NOT MONITORED'}
+          color={stats.isMonitoredApp ? '#4CAF50' : '#9E9E9E'}
         />
         <StatusCard
           title="Processing"
@@ -417,11 +663,10 @@ export default function ScreenCaptureScreen() {
           color={isProcessing ? '#FF9800' : (captureLoop ? '#2196F3' : '#4CAF50')}
         />
         <StatusCard
-          title="Permission"
-          value={permissionGranted ? 'GRANTED' : 'REQUIRED'}
-          color={permissionGranted ? '#4CAF50' : '#FF9800'}
+          title="Skipped"
+          value={stats.capturesSkipped}
+          color={'#9E9E9E'}
         />
-
       </View>
 
       {/* Control Buttons */}
@@ -430,13 +675,73 @@ export default function ScreenCaptureScreen() {
           Controls
         </Text>
 
+        {/* Smart Capture Toggle */}
+        <TouchableOpacity
+          style={[
+            styles.button, 
+            { 
+              backgroundColor: smartCaptureEnabled ? '#4CAF50' : '#9E9E9E',
+              marginBottom: 16 
+            }
+          ]}
+          onPress={() => setSmartCaptureEnabled(!smartCaptureEnabled)}
+        >
+          <Text style={styles.buttonText}>
+            {smartCaptureEnabled ? '🎯 Smart Capture: ON' : '📱 Smart Capture: OFF'}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={[
+          styles.smartCaptureDescription, 
+          { color: isDark ? '#9BA1A6' : '#687076' }
+        ]}>
+          {smartCaptureEnabled 
+            ? '✅ Only captures when social media apps are active (saves resources)'
+            : '⚠️ Captures all apps (uses more resources)'
+          }
+        </Text>
+
+        {/* Accessibility Service Status */}
+        {smartCaptureEnabled && (
+          <View style={[styles.serviceStatusSection, { 
+            backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
+            borderColor: stats.currentApp === 'service_disabled' ? '#FF3B30' : '#34C759'
+          }]}>
+            <Text style={[styles.serviceStatusTitle, { 
+              color: stats.currentApp === 'service_disabled' ? '#FF3B30' : '#34C759' 
+            }]}>
+              📱 App Detection Status
+            </Text>
+            
+            <Text style={[styles.serviceStatusText, { color: isDark ? '#ECEDEE' : '#11181C' }]}>
+              {stats.currentApp === 'service_disabled' 
+                ? '❌ Accessibility service not enabled'
+                : `✅ Current: ${stats.currentAppName}`
+              }
+            </Text>
+            
+            <Text style={[styles.serviceStatusText, { color: isDark ? '#ECEDEE' : '#11181C' }]}>
+              Status: {stats.isMonitoredApp ? '🎯 MONITORED' : '🚫 NOT MONITORED'}
+            </Text>
+            
+            {stats.currentApp === 'service_disabled' && (
+              <TouchableOpacity
+                style={[styles.enableServiceButton, { backgroundColor: '#FF9500' }]}
+                onPress={openAccessibilitySettings}
+              >
+                <Text style={styles.buttonText}>⚙️ Enable App Detection</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {!permissionGranted && (
           <TouchableOpacity
             style={[styles.button, { backgroundColor: '#FF9800' }]}
             onPress={requestPermission}
             disabled={loading}
           >
-            <Text style={styles.buttonText}>🔐 Request Permission</Text>
+            <Text style={styles.buttonText}>� Request Permission</Text>
           </TouchableOpacity>
         )}
 
@@ -446,7 +751,9 @@ export default function ScreenCaptureScreen() {
             onPress={startCapture}
             disabled={loading}
           >
-            <Text style={styles.buttonText}>🎬 Start Sequential Capture</Text>
+            <Text style={styles.buttonText}>
+              {smartCaptureEnabled ? '🎯 Start Smart Capture' : '🎬 Start Sequential Capture'}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -456,9 +763,60 @@ export default function ScreenCaptureScreen() {
             onPress={stopCapture}
             disabled={loading}
           >
-            <Text style={styles.buttonText}>🛑 Stop Sequential Capture</Text>
+            <Text style={styles.buttonText}>🛑 Stop Capture</Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* App Detection Info */}
+      <View style={styles.appDetectionSection}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#ECEDEE' : '#11181C' }]}>
+          App Detection Status
+        </Text>
+
+        <View style={[styles.appDetectionCard, { backgroundColor: isDark ? '#2A2A2A' : '#F5F5F5' }]}>
+          <View style={styles.appDetectionRow}>
+            <Text style={[styles.appDetectionLabel, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+              Current App:
+            </Text>
+            <Text style={[
+              styles.appDetectionValue, 
+              { color: stats.isMonitoredApp ? '#4CAF50' : (isDark ? '#ECEDEE' : '#11181C') }
+            ]}>
+              {stats.currentAppName}
+            </Text>
+          </View>
+
+          <View style={styles.appDetectionRow}>
+            <Text style={[styles.appDetectionLabel, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+              Package:
+            </Text>
+            <Text style={[styles.appDetectionValue, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+              {stats.currentApp || 'Unknown'}
+            </Text>
+          </View>
+
+          <View style={styles.appDetectionRow}>
+            <Text style={[styles.appDetectionLabel, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+              Status:
+            </Text>
+            <Text style={[
+              styles.appDetectionValue, 
+              { color: stats.isMonitoredApp ? '#4CAF50' : '#9E9E9E' }
+            ]}>
+              {stats.isMonitoredApp ? '🎯 MONITORED' : '📱 Not Monitored'}
+            </Text>
+          </View>
+
+          <View style={styles.appDetectionRow}>
+            <Text style={[styles.appDetectionLabel, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+              App Changes:
+            </Text>
+            <Text style={[styles.appDetectionValue, { color: isDark ? '#ECEDEE' : '#11181C' }]}>
+              {stats.appChangeCount}
+            </Text>
+          </View>
+        </View>
       </View>
 
       {/* Interval Controls */}
@@ -539,6 +897,20 @@ export default function ScreenCaptureScreen() {
           onPress={checkCaptureStatus}
         >
           <Text style={styles.buttonText}>🔄 Refresh Status</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
+          onPress={async () => {
+            try {
+              const result = await AppDetectionModule.getCurrentApp();
+              Alert.alert('Current App', `App: ${result.appName}\nPackage: ${result.packageName}\nMonitored: ${result.isMonitored ? 'Yes' : 'No'}`);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to get current app info');
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>📱 Check Current App</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -665,5 +1037,58 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 12,
+  },
+  smartCaptureDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  serviceStatusSection: {
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 2,
+  },
+  serviceStatusTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  serviceStatusText: {
+    fontSize: 14,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  enableServiceButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  appDetectionSection: {
+    marginBottom: 30,
+  },
+  appDetectionCard: {
+    padding: 15,
+    borderRadius: 12,
+  },
+  appDetectionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  appDetectionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  appDetectionValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
   },
 });

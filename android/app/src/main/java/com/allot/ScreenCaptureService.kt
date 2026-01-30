@@ -39,7 +39,7 @@ class ScreenCaptureService : Service() {
     private val isProcessingFrame = AtomicBoolean(false)
 
     // Backend configuration - KEEP GROQ BACKEND!
-    private var backendUrl = "http://192.168.100.47:3000/analyze"
+    private var backendUrl = "http://192.168.100.55:3000/analyze"
     private var enableNativeBackend = true
     
     // Local text extraction integration (REPLACES Google Vision API)
@@ -242,6 +242,24 @@ class ScreenCaptureService : Service() {
             }
 
             try {
+                // CRITICAL: Check if we should process this capture based on current app
+                val accessibilityService = AllotAccessibilityService.getInstance()
+                if (accessibilityService != null) {
+                    val isMonitoredApp = accessibilityService.isCurrentAppMonitored()
+                    val currentApp = accessibilityService.getCurrentApp()
+                    val appName = accessibilityService.getAppDisplayName(currentApp)
+                    
+                    if (!isMonitoredApp) {
+                        Log.d(TAG, "⏭️ SKIPPING FRAME: Not in monitored app ($appName)")
+                        Log.d(TAG, "🎯 Smart Capture: Only processing social media apps")
+                        return@launch
+                    } else {
+                        Log.d(TAG, "✅ PROCESSING FRAME: In monitored app ($appName)")
+                    }
+                } else {
+                    Log.w(TAG, "⚠️ Accessibility service not available - processing anyway (fallback)")
+                }
+                
                 // CHECK: Skip processing if blocking is active
                 if (isBlockingActive) {
                     Log.d(TAG, "⏸️  Skipping frame processing - content blocking active")

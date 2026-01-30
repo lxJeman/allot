@@ -96,21 +96,21 @@ export default function Phase4DemoScreen() {
       }
     });
     
-    // Listen for screen captures
-    const captureListener = DeviceEventEmitter.addListener('onScreenCaptured', async (data) => {
-      // Only process if monitoring is active AND we're in a monitored app
-      if (isMonitoringRef.current && isMonitoredApp && !isProcessingRef.current) {
-        console.log('🎯 Processing capture from monitored app...');
-        await processCapture(data);
-      }
-    });
+    // Listen for screen captures - DISABLED TO PREVENT INTERFERENCE
+    // const captureListener = DeviceEventEmitter.addListener('onScreenCaptured', async (data) => {
+    //   // Only process if monitoring is active AND we're in a monitored app
+    //   if (isMonitoringRef.current && isMonitoredApp && !isProcessingRef.current) {
+    //     console.log('🎯 Processing capture from monitored app...');
+    //     await processCapture(data);
+    //   }
+    // });
     
     // Check current app on mount
     checkCurrentApp();
     
     return () => {
       appChangeListener.remove();
-      captureListener.remove();
+      // captureListener.remove(); // Disabled
     };
   }, [isMonitoredApp]);
   
@@ -149,7 +149,7 @@ export default function Phase4DemoScreen() {
       console.log('🚀 Sending to backend for analysis...');
       
       // Send to backend
-      const response = await fetch('http://192.168.100.47:3000/analyze', {
+      const response = await fetch('http://192.168.100.55:3000/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

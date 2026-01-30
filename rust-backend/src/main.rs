@@ -298,7 +298,7 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     info!("🌐 Server listening on http://0.0.0.0:3000");
-    info!("📱 Device should connect to http://192.168.100.47:3000");
+    info!("📱 Device should connect to http://192.168.100.55:3000");
     info!("📡 Ready to receive screen captures");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();

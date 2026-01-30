@@ -44,6 +44,26 @@ class AllotAccessibilityService : AccessibilityService() {
             "com.pinterest",               // Pinterest
             "com.linkedin.android"         // LinkedIn
         )
+        
+        // App display names for better logging
+        private val APP_DISPLAY_NAMES = mapOf(
+            "com.zhiliaoapp.musically" to "TikTok",
+            "com.zhiliaoapp.musically.go" to "TikTok Lite",
+            "com.ss.android.ugc.trill" to "TikTok Lite",
+            "com.instagram.android" to "Instagram",
+            "com.instagram.lite" to "Instagram Lite",
+            "com.facebook.katana" to "Facebook",
+            "com.facebook.lite" to "Facebook Lite",
+            "com.twitter.android" to "Twitter",
+            "com.reddit.frontpage" to "Reddit",
+            "com.snapchat.android" to "Snapchat",
+            "com.whatsapp" to "WhatsApp",
+            "com.discord" to "Discord",
+            "com.pinterest" to "Pinterest",
+            "com.linkedin.android" to "LinkedIn"
+        )
+        
+        data class MonitoredApp(val packageName: String, val displayName: String)
     }
     
     private var overlayView: View? = null
@@ -51,6 +71,8 @@ class AllotAccessibilityService : AccessibilityService() {
     private var currentApp: String? = null
     private var isMonitoredApp: Boolean = false
     private val handler = Handler(Looper.getMainLooper())
+    private var debugLoggingEnabled: Boolean = false
+    private var appChangeCount: Int = 0
     
     // Callback for app changes
     var onAppChanged: ((String, Boolean) -> Unit)? = null
@@ -84,31 +106,37 @@ class AllotAccessibilityService : AccessibilityService() {
             if (it.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 val packageName = it.packageName?.toString()
                 if (packageName != null && packageName != currentApp) {
+                    val previousApp = currentApp
+                    val previousAppName = getAppDisplayName(previousApp)
+                    
                     currentApp = packageName
                     isMonitoredApp = MONITORED_APPS.contains(packageName)
+                    appChangeCount++
                     
-                    val appName = when (packageName) {
-                        "com.zhiliaoapp.musically" -> "TikTok"
-                        "com.zhiliaoapp.musically.go" -> "TikTok Lite"
-                        "com.ss.android.ugc.trill" -> "TikTok Lite"
-                        "com.instagram.android" -> "Instagram"
-                        "com.instagram.lite" -> "Instagram Lite"
-                        "com.facebook.katana" -> "Facebook"
-                        "com.facebook.lite" -> "Facebook Lite"
-                        "com.twitter.android" -> "Twitter"
-                        "com.reddit.frontpage" -> "Reddit"
-                        "com.snapchat.android" -> "Snapchat"
-                        "com.whatsapp" -> "WhatsApp"
-                        "com.discord" -> "Discord"
-                        "com.pinterest" -> "Pinterest"
-                        "com.linkedin.android" -> "LinkedIn"
-                        else -> packageName
+                    val appName = getAppDisplayName(packageName)
+                    
+                    if (debugLoggingEnabled) {
+                        Log.i(TAG, "")
+                        Log.i(TAG, "🔄 APP CHANGE #$appChangeCount")
+                        Log.i(TAG, "   FROM: $previousAppName")
+                        Log.i(TAG, "   TO:   $appName")
+                        Log.i(TAG, "   PKG:  $packageName")
+                        Log.i(TAG, "   MONITORED: $isMonitoredApp")
+                        Log.i(TAG, "   TIME: ${System.currentTimeMillis()}")
+                        Log.i(TAG, "")
                     }
                     
                     if (isMonitoredApp) {
-                        Log.d(TAG, "📱 Switched to monitored app: $appName")
+                        Log.w(TAG, "🎯 ENTERED MONITORED APP: $appName")
+                        Log.w(TAG, "   → Screen capture should START")
                     } else {
-                        Log.v(TAG, "📱 Switched to: $appName (not monitored)")
+                        if (MONITORED_APPS.contains(previousApp)) {
+                            Log.w(TAG, "🚪 LEFT MONITORED APP: $previousAppName")
+                            Log.w(TAG, "   → Screen capture should STOP")
+                        }
+                        if (debugLoggingEnabled) {
+                            Log.d(TAG, "📱 Non-monitored app: $appName")
+                        }
                     }
                     
                     // Notify callback
@@ -284,5 +312,45 @@ class AllotAccessibilityService : AccessibilityService() {
     
     fun performScrollDown(): Boolean {
         return performAutoScroll()
+    }
+    
+    fun getAppDisplayName(packageName: String?): String {
+        return if (packageName != null) {
+            APP_DISPLAY_NAMES[packageName] ?: packageName
+        } else {
+            "Unknown"
+        }
+    }
+    
+    fun getMonitoredAppsList(): List<MonitoredApp> {
+        return MONITORED_APPS.map { packageName ->
+            MonitoredApp(packageName, getAppDisplayName(packageName))
+        }
+    }
+    
+    fun enableDebugLogging(enabled: Boolean) {
+        debugLoggingEnabled = enabled
+        if (enabled) {
+            Log.i(TAG, "🔍 DEBUG LOGGING ENABLED")
+            Log.i(TAG, "   Current app: ${getAppDisplayName(currentApp)}")
+            Log.i(TAG, "   Is monitored: $isMonitoredApp")
+            Log.i(TAG, "   App changes: $appChangeCount")
+            Log.i(TAG, "   Monitored apps: ${MONITORED_APPS.size}")
+        } else {
+            Log.i(TAG, "🔇 DEBUG LOGGING DISABLED")
+        }
+    }
+    
+    fun getDebugInfo(): Map<String, Any> {
+        return mapOf(
+            "currentApp" to (currentApp ?: "None"),
+            "currentAppName" to getAppDisplayName(currentApp),
+            "isMonitored" to isMonitoredApp,
+            "appChangeCount" to appChangeCount,
+            "debugLogging" to debugLoggingEnabled,
+            "monitoredAppsCount" to MONITORED_APPS.size,
+            "serviceRunning" to isServiceRunning(),
+            "timestamp" to System.currentTimeMillis()
+        )
     }
 }

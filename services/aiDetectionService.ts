@@ -55,7 +55,7 @@ const DEFAULT_CONFIG: DetectionConfig = {
 };
 
 // Removed Google Vision API key - no longer needed
-const BACKEND_URL = 'http://192.168.100.47:3000';
+const BACKEND_URL = 'http://192.168.100.55:3000';
 
 // ============================================================================
 // AI DETECTION SERVICE

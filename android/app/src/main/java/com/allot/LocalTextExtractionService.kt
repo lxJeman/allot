@@ -309,6 +309,24 @@ class LocalTextExtractionService : Service() {
             }
 
             try {
+                // CRITICAL: Check if we should process this capture based on current app
+                val accessibilityService = AllotAccessibilityService.getInstance()
+                if (accessibilityService != null) {
+                    val isMonitoredApp = accessibilityService.isCurrentAppMonitored()
+                    val currentApp = accessibilityService.getCurrentApp()
+                    val appName = accessibilityService.getAppDisplayName(currentApp)
+                    
+                    if (!isMonitoredApp) {
+                        Log.d(TAG, "⏭️ SKIPPING LOCAL ML: Not in monitored app ($appName)")
+                        Log.d(TAG, "🎯 Smart Capture: Only processing social media apps")
+                        return@launch
+                    } else {
+                        Log.d(TAG, "✅ PROCESSING LOCAL ML: In monitored app ($appName)")
+                    }
+                } else {
+                    Log.w(TAG, "⚠️ Accessibility service not available - processing anyway (fallback)")
+                }
+                
                 val overallStartTime = System.currentTimeMillis()
                 Log.d(TAG, "🎯 Starting SINGLE on-demand capture...")
 
