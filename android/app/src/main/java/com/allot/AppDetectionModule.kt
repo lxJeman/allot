@@ -15,8 +15,19 @@ class AppDetectionModule(reactContext: ReactApplicationContext) : ReactContextBa
     
     init {
         // Set up app change listener
-        AllotAccessibilityService.getInstance()?.onAppChanged = { packageName, isMonitored ->
-            sendAppChangeEvent(packageName, isMonitored)
+        AllotAccessibilityService.getInstance()?.let { service ->
+            service.onAppChanged = { packageName, isMonitored ->
+                sendAppChangeEvent(packageName, isMonitored)
+            }
+            
+            // Set up scroll detection listener
+            service.onScrollDetected = {
+                sendScrollDetectedEvent()
+            }
+            
+            Log.d(TAG, "✅ Callbacks connected to accessibility service")
+        } ?: run {
+            Log.w(TAG, "⚠️ Accessibility service not available during init")
         }
     }
     
@@ -225,6 +236,78 @@ class AppDetectionModule(reactContext: ReactApplicationContext) : ReactContextBa
         }
     }
     
+    @ReactMethod
+    fun getScrollDetectionStats(promise: Promise) {
+        try {
+            val service = AllotAccessibilityService.getInstance()
+            if (service == null) {
+                promise.reject("SERVICE_NOT_RUNNING", "Accessibility service is not running")
+                return
+            }
+            
+            val stats = service.getScrollDetectionStats()
+            Log.d(TAG, "📊 getScrollDetectionStats: ${stats["scrollDetectionCount"]} scrolls detected")
+            
+            val result = Arguments.createMap()
+            stats.forEach { (key, value) ->
+                when (value) {
+                    is String -> result.putString(key, value)
+                    is Int -> result.putInt(key, value)
+                    is Long -> result.putDouble(key, value.toDouble())
+                    is Boolean -> result.putBoolean(key, value)
+                }
+            }
+            
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error getting scroll detection stats", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+    
+    @ReactMethod
+    fun resetPipelineOnScroll(promise: Promise) {
+        try {
+            Log.i(TAG, "🔄 PIPELINE RESET REQUESTED")
+            Log.i(TAG, "   → This should clear any pending analysis")
+            Log.i(TAG, "   → Fresh capture cycle will begin")
+            
+            // Send event to React Native to reset pipeline
+            sendScrollDetectedEvent()
+            
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error resetting pipeline", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+    
+    @ReactMethod
+    fun reconnectScrollDetection(promise: Promise) {
+        try {
+            val service = AllotAccessibilityService.getInstance()
+            if (service == null) {
+                promise.reject("SERVICE_NOT_RUNNING", "Accessibility service is not running")
+                return
+            }
+            
+            // Reconnect callbacks
+            service.onAppChanged = { packageName, isMonitored ->
+                sendAppChangeEvent(packageName, isMonitored)
+            }
+            
+            service.onScrollDetected = {
+                sendScrollDetectedEvent()
+            }
+            
+            Log.i(TAG, "✅ SCROLL DETECTION CALLBACKS RECONNECTED")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error reconnecting scroll detection", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+    
     private fun sendAppChangeEvent(packageName: String, isMonitored: Boolean) {
         try {
             if (eventEmitter == null) {
@@ -251,6 +334,34 @@ class AppDetectionModule(reactContext: ReactApplicationContext) : ReactContextBa
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error sending app change event", e)
+        }
+    }
+    
+    private fun sendScrollDetectedEvent() {
+        try {
+            if (eventEmitter == null) {
+                eventEmitter = reactApplicationContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            }
+            
+            val service = AllotAccessibilityService.getInstance()
+            val stats = service?.getScrollDetectionStats()
+            
+            val params = Arguments.createMap().apply {
+                putString("event", "scroll_detected")
+                putLong("timestamp", System.currentTimeMillis())
+                putString("currentApp", stats?.get("currentApp") as? String ?: "unknown")
+                putBoolean("isMonitoredApp", stats?.get("isMonitoredApp") as? Boolean ?: false)
+                putInt("scrollCount", stats?.get("scrollDetectionCount") as? Int ?: 0)
+            }
+            
+            eventEmitter?.emit("onScrollDetected", params)
+            
+            Log.w(TAG, "📜 SCROLL EVENT SENT TO REACT NATIVE")
+            Log.w(TAG, "   → Pipeline should reset now")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending scroll detected event", e)
         }
     }
 }

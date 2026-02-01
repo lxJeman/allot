@@ -73,9 +73,15 @@ class AllotAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var debugLoggingEnabled: Boolean = false
     private var appChangeCount: Int = 0
+    private var scrollDetectionCount: Int = 0
+    private var lastScrollTime: Long = 0
+    private val scrollDetectionThreshold = 2000L // 2 seconds between scroll events to avoid spam
     
     // Callback for app changes
     var onAppChanged: ((String, Boolean) -> Unit)? = null
+    
+    // Callback for scroll detection
+    var onScrollDetected: (() -> Unit)? = null
     
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -141,6 +147,32 @@ class AllotAccessibilityService : AccessibilityService() {
                     
                     // Notify callback
                     onAppChanged?.invoke(packageName, isMonitoredApp)
+                }
+            }
+            
+            // Detect scroll events in monitored apps
+            if (isMonitoredApp && (it.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED || 
+                                   it.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)) {
+                
+                val currentTime = System.currentTimeMillis()
+                
+                // Throttle scroll detection to avoid spam
+                if (currentTime - lastScrollTime > scrollDetectionThreshold) {
+                    lastScrollTime = currentTime
+                    scrollDetectionCount++
+                    
+                    val appName = getAppDisplayName(currentApp)
+                    
+                    Log.w(TAG, "")
+                    Log.w(TAG, "📜 SCROLL DETECTED #$scrollDetectionCount")
+                    Log.w(TAG, "   APP: $appName")
+                    Log.w(TAG, "   EVENT: ${AccessibilityEvent.eventTypeToString(it.eventType)}")
+                    Log.w(TAG, "   TIME: $currentTime")
+                    Log.w(TAG, "   → RESETTING CAPTURE PIPELINE")
+                    Log.w(TAG, "")
+                    
+                    // Notify callback to reset pipeline
+                    onScrollDetected?.invoke()
                 }
             }
         }
@@ -347,10 +379,22 @@ class AllotAccessibilityService : AccessibilityService() {
             "currentAppName" to getAppDisplayName(currentApp),
             "isMonitored" to isMonitoredApp,
             "appChangeCount" to appChangeCount,
+            "scrollDetectionCount" to scrollDetectionCount,
+            "lastScrollTime" to lastScrollTime,
             "debugLogging" to debugLoggingEnabled,
             "monitoredAppsCount" to MONITORED_APPS.size,
             "serviceRunning" to isServiceRunning(),
             "timestamp" to System.currentTimeMillis()
+        )
+    }
+    
+    fun getScrollDetectionStats(): Map<String, Any> {
+        return mapOf(
+            "scrollDetectionCount" to scrollDetectionCount,
+            "lastScrollTime" to lastScrollTime,
+            "scrollThreshold" to scrollDetectionThreshold,
+            "currentApp" to getAppDisplayName(currentApp),
+            "isMonitoredApp" to isMonitoredApp
         )
     }
 }

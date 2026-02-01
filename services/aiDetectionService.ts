@@ -64,11 +64,14 @@ const BACKEND_URL = 'http://192.168.100.55:3000';
 class AIDetectionService {
   private config: DetectionConfig = DEFAULT_CONFIG;
   private cache: Map<string, CachedResult> = new Map();
+  private activeRequests: Map<string, AbortController> = new Map();
+  private cancelledRequests: Set<string> = new Set();
   private stats = {
     totalRequests: 0,
     cacheHits: 0,
     cacheMisses: 0,
     avgProcessingTime: 0,
+    cancelledRequests: 0,
   };
 
   /**
@@ -91,10 +94,15 @@ class AIDetectionService {
    */
   async detectHarmfulContent(extractedText: string, imageWidth?: number, imageHeight?: number): Promise<DetectionResult> {
     const startTime = Date.now();
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     this.stats.totalRequests++;
 
-    console.log('🎯 [AI Detection] Starting pipeline with pre-extracted text...');
+    console.log(`🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: ${requestId})`);
     console.log(`📝 [AI Detection] Text length: ${extractedText.length} chars`);
+
+    // Create abort controller for this request
+    const abortController = new AbortController();
+    this.activeRequests.set(requestId, abortController);
 
     try {
       // If no text provided, return safe
@@ -128,20 +136,32 @@ class AIDetectionService {
         console.log(`❌ [AI Detection] Cache miss (${this.stats.cacheMisses}/${this.stats.totalRequests})`);
       }
 
-      // Step 3: Send extracted text to backend for classification
+      // Step 3: Check if request was cancelled before backend call
+      if (this.cancelledRequests.has(requestId)) {
+        console.log(`🚫 [AI Detection] Request ${requestId} was cancelled before backend call`);
+        throw new Error('Request cancelled due to scroll detection');
+      }
+
+      // Step 4: Send extracted text to backend for classification
       const classificationStart = Date.now();
-      const result = await this.classifyTextWithBackend(extractedText, imageWidth, imageHeight);
+      const result = await this.classifyTextWithBackend(extractedText, imageWidth, imageHeight, requestId);
       const classificationTime = Date.now() - classificationStart;
+
+      // Step 5: Check if request was cancelled after backend call
+      if (this.cancelledRequests.has(requestId)) {
+        console.log(`🚫 [AI Detection] Request ${requestId} was cancelled after backend call - ignoring result`);
+        throw new Error('Request cancelled due to scroll detection');
+      }
 
       console.log(`🧠 [AI Detection] Classification: ${result.category} (${result.confidence * 100}%) - ${result.action}`);
 
-      // Step 4: Cache result
+      // Step 6: Cache result
       if (this.config.enableCache) {
         const textHash = await sha256(normalizedText);
         this.cacheResult(textHash, result);
       }
 
-      // Step 5: Apply block list filter
+      // Step 7: Apply block list filter
       const shouldBlock = this.shouldBlockContent(result);
       if (shouldBlock) {
         console.log(`🚫 [AI Detection] Content blocked: ${result.category}`);
@@ -155,8 +175,17 @@ class AIDetectionService {
       return result;
 
     } catch (error) {
-      console.error('❌ [AI Detection] Pipeline failed:', error);
+      if (error.message?.includes('cancelled') || this.cancelledRequests.has(requestId)) {
+        this.stats.cancelledRequests++;
+        console.log(`🚫 [AI Detection] Request cancelled (ID: ${requestId})`);
+        throw new Error('Request cancelled due to scroll detection');
+      }
+      console.error(`❌ [AI Detection] Pipeline failed (ID: ${requestId}):`, error);
       throw error;
+    } finally {
+      // Clean up abort controller and cancelled flag
+      this.activeRequests.delete(requestId);
+      this.cancelledRequests.delete(requestId);
     }
   }
 
@@ -191,45 +220,81 @@ class AIDetectionService {
   /**
    * Classify extracted text using Rust backend (Groq API)
    */
-  private async classifyTextWithBackend(extractedText: string, imageWidth?: number, imageHeight?: number): Promise<DetectionResult> {
-    const response = await fetch(`${BACKEND_URL}/analyze`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        extracted_text: extractedText, // Send text instead of image
-        width: imageWidth || 720,
-        height: imageHeight || 1600,
-        timestamp: Date.now(),
-        source: 'local_ml_kit', // Indicate source
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Backend error: ${response.status}`);
+  private async classifyTextWithBackend(extractedText: string, imageWidth?: number, imageHeight?: number, requestId?: string): Promise<DetectionResult> {
+    // Check if cancelled before making request
+    if (requestId && this.cancelledRequests.has(requestId)) {
+      throw new Error('Request cancelled before backend call');
     }
 
-    const data = await response.json();
+    console.log(`🌐 [AI Detection] Making backend request (ID: ${requestId})`);
+    
+    // Add network timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log(`⏰ [AI Detection] Network timeout - aborting request (ID: ${requestId})`);
+      controller.abort();
+    }, 2000); // 2 second network timeout - backend responds in 400ms, so 2s is safe
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          extracted_text: extractedText,
+          width: imageWidth || 720,
+          height: imageHeight || 1600,
+          timestamp: Date.now(),
+          source: 'local_ml_kit',
+          request_id: requestId,
+        }),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Check if cancelled after request
+      if (requestId && this.cancelledRequests.has(requestId)) {
+        throw new Error('Request cancelled after backend call');
+      }
 
-    return {
-      id: data.id,
-      category: data.analysis.category,
-      confidence: data.analysis.confidence,
-      harmful: data.analysis.harmful,
-      action: data.analysis.action,
-      detectedText: data.analysis.details.detected_text || extractedText,
-      riskFactors: data.analysis.details.risk_factors,
-      recommendation: data.analysis.details.recommendation,
-      benchmark: {
-        mlKitTimeMs: 0, // ML Kit time is handled in native layer
-        classificationTimeMs: data.benchmark.classification_time_ms,
-        totalTimeMs: data.benchmark.total_time_ms,
-        textLength: extractedText.length,
-        cached: data.benchmark.cached,
-      },
-      timestamp: data.timestamp,
-    };
+      if (!response.ok) {
+        throw new Error(`Backend error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      console.log(`✅ [AI Detection] Backend response received (ID: ${requestId})`);
+
+      return {
+        id: data.id,
+        category: data.analysis.category,
+        confidence: data.analysis.confidence,
+        harmful: data.analysis.harmful,
+        action: data.analysis.action,
+        detectedText: extractedText,
+        riskFactors: data.analysis.risk_factors || [],
+        recommendation: data.analysis.recommendation || 'No recommendation provided',
+        benchmark: {
+          mlKitTimeMs: 0, // Already extracted by ML Kit
+          classificationTimeMs: classificationTime,
+          totalTimeMs: Date.now() - startTime,
+          textLength: extractedText.length,
+          cached: false,
+        },
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error.name === 'AbortError') {
+        console.log(`⏰ [AI Detection] Request aborted due to timeout (ID: ${requestId})`);
+        throw new Error('Network timeout - backend unreachable');
+      }
+      
+      throw error;
+    }
   }
 
   /**
@@ -327,11 +392,38 @@ class AIDetectionService {
   }
 
   /**
+   * Cancel all active requests (called when scroll is detected)
+   */
+  cancelAllRequests() {
+    const activeCount = this.activeRequests.size;
+    console.log(`🚫 [AI Detection] Cancelling ${activeCount} active requests due to scroll`);
+    
+    for (const [requestId, controller] of this.activeRequests.entries()) {
+      // Mark as cancelled
+      this.cancelledRequests.add(requestId);
+      
+      // Try to abort the controller (may not work in React Native)
+      try {
+        controller.abort();
+        console.log(`🚫 [AI Detection] Aborted request: ${requestId}`);
+      } catch (error) {
+        console.log(`⚠️ [AI Detection] Could not abort request ${requestId}:`, error);
+      }
+    }
+    
+    this.stats.cancelledRequests += activeCount;
+    
+    console.log(`✅ [AI Detection] All requests marked as cancelled (${activeCount} total)`);
+    console.log(`📊 [AI Detection] Cancelled requests will be ignored when they complete`);
+  }
+
+  /**
    * Get statistics
    */
   getStats() {
     return {
       ...this.stats,
+      activeRequests: this.activeRequests.size,
       cacheHitRate: this.stats.totalRequests > 0 
         ? (this.stats.cacheHits / this.stats.totalRequests * 100).toFixed(2) + '%'
         : '0%',

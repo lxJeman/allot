@@ -13,6 +13,7 @@ import {
 import { Colors } from '../constants/theme';
 import { useColorScheme } from '../hooks/use-color-scheme';
 import { aiDetectionService } from '../services/aiDetectionService';
+import { BitmapMemoryMonitor } from '../components/BitmapMemoryMonitor';
 
 const { ScreenCaptureModule, ScreenPermissionModule, SmartDetectionModule, AppDetectionModule } = NativeModules;
 
@@ -34,6 +35,10 @@ interface CaptureStats {
   isMonitoredApp: boolean;
   appChangeCount: number;
   capturesSkipped: number;
+  // Scroll detection stats
+  scrollDetectionCount: number;
+  pipelineResetCount: number;
+  lastScrollTime: number;
 }
 
 interface CaptureData {
@@ -85,6 +90,10 @@ export default function ScreenCaptureScreen() {
     isMonitoredApp: false,
     appChangeCount: 0,
     capturesSkipped: 0,
+    // Scroll detection stats
+    scrollDetectionCount: 0,
+    pipelineResetCount: 0,
+    lastScrollTime: 0,
   });
 
   const [lastCapture, setLastCapture] = useState<CaptureData | null>(null);
@@ -96,104 +105,189 @@ export default function ScreenCaptureScreen() {
   const [smartCaptureEnabled, setSmartCaptureEnabled] = useState(true); // New: Smart app-based capture
   const isProcessingRef = useRef(false);
   const captureLoopRef = useRef(false);
+  const recentCaptureIds = useRef(new Set<string>());
 
+  // CRITICAL: Keep captureLoopRef synchronized with captureLoop state
   useEffect(() => {
+    console.log(`🔄 Synchronizing captureLoop state: ${captureLoop} -> captureLoopRef: ${captureLoopRef.current}`);
+    captureLoopRef.current = captureLoop;
+  }, [captureLoop]);
+
+  // Clean up recent capture IDs periodically to prevent memory growth
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      recentCaptureIds.current.clear();
+      console.log('🧹 Cleared recent capture IDs for deduplication');
+    }, 30000); // Clear every 30 seconds
+
+    return () => clearInterval(cleanup);
+  }, []);
+
+  // CONSOLIDATED EVENT LISTENERS - Single useEffect to prevent duplicates
+  useEffect(() => {
+    console.log('🎧 Setting up ALL event listeners - this should only happen ONCE per mount');
+    
     // Check if already capturing
     checkCaptureStatus();
     
     // Initialize app detection
     initializeAppDetection();
 
-    // Listen for permission results (this doesn't depend on captureLoop)
-    const permissionListener = DeviceEventEmitter.addListener('onScreenCapturePermissionResult', (result) => {
-      console.log('🔐 Permission result:', result);
-      setPermissionGranted(result.granted);
-      if (result.granted && result.resultCode) {
-        setResultCode(result.resultCode);
-      }
-    });
-
-    // Listen for app changes from AppDetectionModule
-    const appChangeListener = DeviceEventEmitter.addListener('onAppChanged', (event) => {
-      const timestamp = new Date().toISOString();
-      console.log(`📱 [${timestamp}] App changed:`, event);
-      
-      setStats(prev => ({
-        ...prev,
-        currentApp: event.packageName,
-        currentAppName: event.appName,
-        isMonitoredApp: event.isMonitored,
-        appChangeCount: prev.appChangeCount + 1,
-      }));
-
-      if (event.isMonitored) {
-        console.log(`🎯 [${timestamp}] ENTERED MONITORED APP: ${event.appName}`);
-        console.log(`   → Screen capture should be ACTIVE`);
-      } else {
-        console.log(`📱 [${timestamp}] Left monitored app, now in: ${event.appName}`);
-        console.log(`   → Screen capture should be PAUSED`);
-      }
-    });
-
-    return () => {
-      permissionListener.remove();
-      appChangeListener.remove();
-    };
-  }, []);
-
-  // Separate useEffect for capture listener that depends on captureLoop
-  useEffect(() => {
-    console.log('🎧 Creating capture listener - this should only happen once per mount');
-    
-    // Listen for screen capture events - recreate when captureLoop changes
-    const captureListener = DeviceEventEmitter.addListener('onScreenCaptured', async (data: CaptureData) => {
-      const timestamp = new Date().toISOString();
-      console.log(`📸 [${timestamp}] Screen captured:`, data.width + 'x' + data.height);
-      console.log(`🔍 [${timestamp}] captureLoop state:`, captureLoop);
-      console.log(`🔍 [${timestamp}] captureLoopRef.current:`, captureLoopRef.current);
-
-      setLastCapture(data);
-      setStats(prev => ({
-        ...prev,
-        totalCaptures: prev.totalCaptures + 1,
-        lastCaptureTime: data.timestamp,
-      }));
-
-      // Check if we should process this capture based on current app
-      const shouldProcess = await shouldProcessCapture();
-      
-      if (!shouldProcess) {
-        const skipTimestamp = new Date().toISOString();
-        console.log(`⏭️ [${skipTimestamp}] Skipping capture - not in monitored app (${stats.currentAppName})`);
-        console.log(`🚫 [${skipTimestamp}] CRITICAL: This capture should NOT reach processCapture`);
-        setStats(prev => ({ ...prev, capturesSkipped: prev.capturesSkipped + 1 }));
-        
-        // Continue loop but skip processing
-        if (captureLoopRef.current) {
-          setTimeout(() => {
-            triggerNextCapture();
-          }, 1000); // Shorter delay when skipping
+    // Create all listeners in one place
+    const listeners = [
+      // Permission results listener
+      DeviceEventEmitter.addListener('onScreenCapturePermissionResult', (result) => {
+        console.log('🔐 Permission result received:', result);
+        setPermissionGranted(result.granted);
+        if (result.granted && result.resultCode) {
+          setResultCode(result.resultCode);
         }
-        return;
-      }
+      }),
 
-      // PROCESS captures automatically when loop is active AND in monitored app
-      if (captureLoopRef.current && !isProcessingRef.current) {
-        console.log(`🔄 [${timestamp}] Starting automatic processing for monitored app...`);
-        console.log(`✅ [${timestamp}] CALLING processCapture - this should be the ONLY path to backend`);
-        processCapture(data); // Don't await here to prevent blocking
-      } else if (isProcessingRef.current) {
-        console.log(`⏳ [${timestamp}] Already processing, skipping this capture`);
-      } else {
-        console.log(`⏸️ [${timestamp}] captureLoop is false, skipping automatic processing`);
-      }
-    });
+      // App changes listener
+      DeviceEventEmitter.addListener('onAppChanged', (event) => {
+        const timestamp = new Date().toISOString();
+        console.log(`📱 [${timestamp}] App changed:`, event);
+        
+        setStats(prev => ({
+          ...prev,
+          currentApp: event.packageName,
+          currentAppName: event.appName,
+          isMonitoredApp: event.isMonitored,
+          appChangeCount: prev.appChangeCount + 1,
+        }));
 
+        if (event.isMonitored) {
+          console.log(`🎯 [${timestamp}] ENTERED MONITORED APP: ${event.appName}`);
+          console.log(`   → Screen capture should be ACTIVE`);
+          
+          // ZERO DELAYS: Immediate restart if conditions are met
+          if (captureLoopRef.current && !isProcessingRef.current) {
+            console.log(`🔄 [${timestamp}] → IMMEDIATELY restarting capture for monitored app`);
+            triggerNextCapture();
+          } else {
+            console.log(`🚫 [${timestamp}] → Not restarting: Loop=${captureLoopRef.current}, Processing=${isProcessingRef.current}`);
+          }
+        } else {
+          console.log(`📱 [${timestamp}] Left monitored app, now in: ${event.appName}`);
+          console.log(`   → Screen capture should be PAUSED`);
+        }
+      }),
+
+      // Scroll detection listener
+      DeviceEventEmitter.addListener('onScrollDetected', (event) => {
+        const timestamp = new Date().toISOString();
+        console.log(`📜 [${timestamp}] SCROLL DETECTED:`, event);
+        console.log(`📜 [${timestamp}] App: ${event.currentApp}, Count: ${event.scrollCount}`);
+        
+        // CRITICAL FIX: Don't interrupt active processing
+        if (isProcessingRef.current) {
+          console.log(`🚫 [${timestamp}] IGNORING SCROLL - Currently processing (ID in progress)`);
+          console.log(`🚫 [${timestamp}] → Will reset after current processing completes`);
+          return;
+        }
+        
+        console.log(`📜 [${timestamp}] → RESETTING CAPTURE PIPELINE`);
+        
+        // Reset pipeline state
+        resetCaptureState();
+        
+        // Update stats
+        setStats(prev => ({
+          ...prev,
+          scrollDetectionCount: event.scrollCount || prev.scrollDetectionCount + 1,
+          pipelineResetCount: prev.pipelineResetCount + 1,
+          lastScrollTime: event.timestamp || Date.now(),
+        }));
+      }),
+
+      // Screen capture listener
+      DeviceEventEmitter.addListener('onScreenCaptured', async (data: CaptureData) => {
+        const timestamp = new Date().toISOString();
+        const captureId = `${data.timestamp}_${data.width}x${data.height}`;
+        
+        // Event deduplication - prevent processing the same capture multiple times
+        if (recentCaptureIds.current.has(captureId)) {
+          console.log(`🔄 [${timestamp}] DUPLICATE CAPTURE DETECTED - Skipping (ID: ${captureId})`);
+          return;
+        }
+        recentCaptureIds.current.add(captureId);
+        
+        console.log(`📸 [${timestamp}] Screen captured:`, data.width + 'x' + data.height);
+        console.log(`🔍 [${timestamp}] captureLoopRef.current:`, captureLoopRef.current);
+
+        setLastCapture(data);
+        setStats(prev => ({
+          ...prev,
+          totalCaptures: prev.totalCaptures + 1,
+          lastCaptureTime: data.timestamp,
+        }));
+
+        // CRITICAL FIX: Get app info at capture time to avoid race conditions
+        let currentAppInfo;
+        try {
+          currentAppInfo = await AppDetectionModule.getCurrentApp();
+          console.log(`📱 [${timestamp}] App at capture time: ${currentAppInfo.appName} (monitored: ${currentAppInfo.isMonitored})`);
+        } catch (error) {
+          console.error(`❌ [${timestamp}] Failed to get app info at capture time:`, error);
+          currentAppInfo = { isMonitored: false, appName: 'Unknown', packageName: 'unknown' };
+        }
+
+        // Check if we should process this capture based on app info at capture time
+        const shouldProcess = !smartCaptureEnabled || currentAppInfo.isMonitored;
+        
+        if (!shouldProcess) {
+          const skipTimestamp = new Date().toISOString();
+          console.log(`⏭️ [${skipTimestamp}] Skipping capture - not in monitored app (${currentAppInfo.appName})`);
+          console.log(`🚫 [${skipTimestamp}] CRITICAL: This capture should NOT reach processCapture`);
+          setStats(prev => ({ ...prev, capturesSkipped: prev.capturesSkipped + 1 }));
+          
+          // ZERO DELAYS: Continue immediately, no artificial delay
+          if (captureLoopRef.current) {
+            console.log(`🔄 [${skipTimestamp}] → IMMEDIATELY continuing capture loop after skip`);
+            console.log(`🔄 [${skipTimestamp}] → Processing state: ${isProcessingRef.current}`);
+            
+            // CRITICAL FIX: Always trigger next capture immediately
+            if (captureLoopRef.current && !isProcessingRef.current) {
+              triggerNextCapture();
+            } else if (isProcessingRef.current) {
+              console.log(`🚫 [${skipTimestamp}] → Not triggering - already processing another capture`);
+            }
+          } else {
+            console.log(`🛑 [${skipTimestamp}] → Capture loop stopped, not continuing`);
+          }
+          return;
+        }
+
+        // PROCESS captures automatically when loop is active AND in monitored app
+        if (captureLoopRef.current && !isProcessingRef.current) {
+          console.log(`🔄 [${timestamp}] Starting automatic processing for monitored app: ${currentAppInfo.appName}`);
+          console.log(`✅ [${timestamp}] CALLING processCapture - this should be the ONLY path to backend`);
+          console.log(`🔍 [${timestamp}] Processing state BEFORE: ${isProcessingRef.current}`);
+          
+          processCapture(data, currentAppInfo); // Pass app info to avoid re-querying
+        } else if (isProcessingRef.current) {
+          console.log(`⏳ [${timestamp}] Already processing, skipping this capture`);
+          console.log(`🔍 [${timestamp}] Current processing state: ${isProcessingRef.current}`);
+        } else {
+          console.log(`⏸️ [${timestamp}] captureLoop is false, skipping automatic processing`);
+          console.log(`🔍 [${timestamp}] captureLoopRef.current: ${captureLoopRef.current}`);
+        }
+      }),
+    ];
+
+    // Cleanup function
     return () => {
-      console.log('🗑️ Cleaning up capture listener');
-      captureListener.remove();
+      console.log('🗑️ Cleaning up ALL event listeners');
+      listeners.forEach(listener => {
+        try {
+          listener.remove();
+        } catch (error) {
+          console.error('Error removing listener:', error);
+        }
+      });
     };
-  }, []); // Stable listener using refs
+  }, []); // Empty dependency array - listeners created only once
 
   const checkCaptureStatus = async () => {
     try {
@@ -348,20 +442,20 @@ export default function ScreenCaptureScreen() {
     setLoading(true);
     try {
       console.log('🎬 Starting sequential screen capture...');
-      // Start the native capture system
+      
+      // Start the native capture system first
       await ScreenCaptureModule.startScreenCapture();
       setStats(prev => ({ ...prev, isCapturing: true }));
 
-      // Start the response-driven loop
+      // Set the capture loop state
       setCaptureLoop(true);
       captureLoopRef.current = true;
 
-      // Trigger the first capture to start the loop
       console.log('🔄 Starting sequential loop...');
-      setTimeout(() => {
-        console.log('🎯 Triggering first capture...');
-        triggerNextCapture();
-      }, 1000); // Give native system time to initialize
+      console.log('🎯 Triggering IMMEDIATE initial capture...');
+      
+      // PERFORMANCE FIX: Trigger immediately, no artificial delay
+      triggerNextCapture();
 
       Alert.alert('Success', 'Sequential screen capture started! Each screenshot waits for analysis.');
     } catch (error) {
@@ -409,6 +503,7 @@ export default function ScreenCaptureScreen() {
 
   const triggerNextCapture = useCallback(async () => {
     const timestamp = new Date().toISOString();
+    
     try {
       console.log(`🎯 [${timestamp}] Calling captureNextFrame...`);
       await ScreenCaptureModule.captureNextFrame();
@@ -418,48 +513,117 @@ export default function ScreenCaptureScreen() {
     }
   }, []);
 
-  const processCapture = useCallback(async (captureData: CaptureData): Promise<void> => {
+  const resetCaptureState = useCallback(() => {
+    const timestamp = new Date().toISOString();
+    console.log(`🔄 [${timestamp}] RESETTING CAPTURE STATE`);
+    console.log(`🔄 [${timestamp}] → Clearing processing flags`);
+    console.log(`🔄 [${timestamp}] → Stopping any pending analysis`);
+    console.log(`🔄 [${timestamp}] → Cancelling backend requests`);
+    
+    // AGGRESSIVELY stop any current processing
+    setIsProcessing(false);
+    isProcessingRef.current = false;
+    
+    // Clear last capture to force fresh analysis
+    setLastCapture(null);
+    
+    // CRITICAL: Cancel all active backend requests
+    try {
+      aiDetectionService.cancelAllRequests();
+      console.log(`🚫 [${timestamp}] → Backend requests cancelled successfully`);
+    } catch (error) {
+      console.log(`⚠️ [${timestamp}] Could not cancel backend requests:`, error);
+    }
+    
+    // CRITICAL FIX: Only restart capture if we're still in a monitored app AND capture loop is active
+    if (captureLoopRef.current) {
+      console.log(`🔄 [${timestamp}] → Checking if we should restart capture loop`);
+      
+      // Get fresh app status for accurate restart decision
+      AppDetectionModule.getCurrentApp()
+        .then((currentAppResult: any) => {
+          if (currentAppResult.isMonitored && captureLoopRef.current) {
+            console.log(`🔄 [${timestamp}] → Restarting capture loop - still in monitored app: ${currentAppResult.appName}`);
+            
+            // Update stats with fresh app info
+            setStats(prev => ({
+              ...prev,
+              currentApp: currentAppResult.packageName || 'unknown',
+              currentAppName: currentAppResult.appName || 'Unknown',
+              isMonitoredApp: currentAppResult.isMonitored,
+            }));
+            
+            // ZERO DELAYS: Immediate restart if not processing
+            if (!isProcessingRef.current) {
+              console.log(`🎯 [${timestamp}] → IMMEDIATELY triggering fresh capture after scroll reset`);
+              triggerNextCapture();
+            } else {
+              console.log(`🚫 [${timestamp}] → Not restarting - currently processing`);
+            }
+          } else {
+            console.log(`🚫 [${timestamp}] → NOT restarting capture - not in monitored app or loop stopped`);
+            console.log(`   App: ${currentAppResult.appName}, Monitored: ${currentAppResult.isMonitored}, Loop: ${captureLoopRef.current}`);
+          }
+        })
+        .catch((error: any) => {
+          console.error(`❌ [${timestamp}] Error checking app status for restart:`, error);
+        });
+    } else {
+      console.log(`🛑 [${timestamp}] → Capture loop is stopped, not restarting`);
+    }
+    
+    console.log(`✅ [${timestamp}] CAPTURE STATE RESET COMPLETE`);
+  }, [triggerNextCapture]);
+
+  const processCapture = useCallback(async (captureData: CaptureData, appInfo?: any): Promise<void> => {
     const entryTimestamp = new Date().toISOString();
-    console.log(`🚪 [${entryTimestamp}] processCapture ENTRY - smartCaptureEnabled: ${smartCaptureEnabled}`);
+    const processingId = `proc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    
+    console.log(`🚪 [${entryTimestamp}] processCapture ENTRY (ID: ${processingId}) - smartCaptureEnabled: ${smartCaptureEnabled}`);
     
     // Add stack trace to see where this is being called from
     console.log(`📍 [${entryTimestamp}] processCapture called from:`, new Error().stack?.split('\n')[2]?.trim());
     
+    // CRITICAL FIX: Check if already processing BEFORE setting the flag
     if (isProcessingRef.current) {
       const timestamp = new Date().toISOString();
-      console.log(`⏳ [${timestamp}] Already processing, skipping capture`);
+      console.log(`⏳ [${timestamp}] Already processing, skipping capture (ID: ${processingId})`);
       return;
     }
+    
+    // Set processing flag AFTER the check
+    setIsProcessing(true);
+    isProcessingRef.current = true;
 
-    // CRITICAL: Double-check if we should process this capture
-    if (smartCaptureEnabled) {
+    // CRITICAL: Use provided app info or double-check if we should process this capture
+    if (smartCaptureEnabled && !appInfo) {
       try {
-        const isMonitored = await AppDetectionModule.isMonitoredApp();
         const currentAppResult = await AppDetectionModule.getCurrentApp();
+        appInfo = currentAppResult;
         
-        console.log(`🚫 [${entryTimestamp}] CRITICAL DOUBLE-CHECK:`);
+        console.log(`🚫 [${entryTimestamp}] CRITICAL DOUBLE-CHECK (ID: ${processingId}):`);
         console.log(`   Smart Capture: ${smartCaptureEnabled}`);
         console.log(`   Current App: ${currentAppResult.appName}`);
-        console.log(`   Is Monitored: ${isMonitored}`);
+        console.log(`   Is Monitored: ${currentAppResult.isMonitored}`);
         
-        if (!isMonitored) {
-          console.log(`🚫 [${entryTimestamp}] BLOCKED: Smart capture enabled but not in monitored app - aborting processing`);
+        if (!currentAppResult.isMonitored) {
+          console.log(`🚫 [${entryTimestamp}] BLOCKED: Smart capture enabled but not in monitored app - aborting processing (ID: ${processingId})`);
           console.log(`🚫 [${entryTimestamp}] THIS SHOULD PREVENT ALL ML KIT AND BACKEND CALLS`);
           
           // Continue loop but skip processing
           if (captureLoopRef.current) {
-            setTimeout(() => {
-              triggerNextCapture();
-            }, 1000);
+            triggerNextCapture();
           }
           return;
         } else {
-          console.log(`✅ [${entryTimestamp}] PROCEEDING: In monitored app ${currentAppResult.appName}`);
+          console.log(`✅ [${entryTimestamp}] PROCEEDING: In monitored app ${currentAppResult.appName} (ID: ${processingId})`);
         }
       } catch (error) {
-        console.error(`❌ [${entryTimestamp}] Error in processCapture app check:`, error);
+        console.error(`❌ [${entryTimestamp}] Error in processCapture app check (ID: ${processingId}):`, error);
         return;
       }
+    } else if (appInfo) {
+      console.log(`✅ [${entryTimestamp}] Using provided app info: ${appInfo.appName} (monitored: ${appInfo.isMonitored}) (ID: ${processingId})`);
     }
 
     const startTime = Date.now();
@@ -467,18 +631,43 @@ export default function ScreenCaptureScreen() {
 
     setIsProcessing(true);
     isProcessingRef.current = true;
+    
+    // Set a timeout to prevent getting stuck in processing
+    const processingTimeout = setTimeout(() => {
+      console.log(`⏰ [${timestamp}] PROCESSING TIMEOUT - Forcing reset after 30 seconds (ID: ${processingId})`);
+      console.log(`⏰ [${timestamp}] This means backend request is hanging or failed`);
+      
+      // Mark as cancelled but don't reset processing flags yet
+      // Let the finally block handle the cleanup and restart
+      console.log(`⏰ [${timestamp}] Marking request as cancelled - finally block will handle restart`);
+    }, 5000); // 5 second timeout - backend should respond in <1 second
+    
     try {
-      console.log(`🤖 [${timestamp}] Starting Local ML Kit text extraction...`);
+      console.log(`🤖 [${timestamp}] Starting Local ML Kit text extraction... (ID: ${processingId})`);
       console.log(`🤖 [${timestamp}] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS`);
       console.log(`🤖 [${timestamp}] If you see this for non-monitored apps, there's a bug!`);
+
+      // CRITICAL: Check if we're still supposed to be processing before ML Kit
+      if (!isProcessingRef.current) {
+        console.log(`🚫 [${timestamp}] Processing was cancelled before ML Kit - aborting (ID: ${processingId})`);
+        clearTimeout(processingTimeout);
+        return;
+      }
 
       // Step 1: Extract text using Local ML Kit (on-device)
       const mlKitStartTime = Date.now();
       const extractionResult = await SmartDetectionModule.extractText(captureData.base64);
       const mlKitTime = Date.now() - mlKitStartTime;
 
+      // CRITICAL: Check again after ML Kit completes
+      if (!isProcessingRef.current) {
+        console.log(`🚫 [${timestamp}] Processing was cancelled after ML Kit - aborting backend call (ID: ${processingId})`);
+        clearTimeout(processingTimeout);
+        return;
+      }
+
       const extractedText = extractionResult.extractedText || '';
-      console.log(`📝 [${timestamp}] ML Kit extraction complete (${mlKitTime}ms): "${extractedText.substring(0, 100)}${extractedText.length > 100 ? '...' : ''}"`);
+      console.log(`📝 [${timestamp}] ML Kit extraction complete (${mlKitTime}ms) (ID: ${processingId}): "${extractedText.substring(0, 100)}${extractedText.length > 100 ? '...' : ''}"`);
 
       // Update stats
       setStats(prev => ({
@@ -490,75 +679,145 @@ export default function ScreenCaptureScreen() {
 
       // Step 2: Send extracted text to backend for LLM classification (only if we have meaningful text)
       if (extractedText.trim().length > 3) {
-        console.log(`🧠 [${timestamp}] Sending extracted text to backend for classification...`);
+        console.log(`🧠 [${timestamp}] Sending extracted text to backend for classification... (ID: ${processingId})`);
         console.log(`🧠 [${timestamp}] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS`);
         console.log(`🧠 [${timestamp}] If you see this for non-monitored apps, there's a critical bug!`);
+        console.log(`🌐 [${timestamp}] About to call aiDetectionService.detectHarmfulContent`);
+        console.log(`📝 [${timestamp}] Text length: ${extractedText.length} chars`);
 
         const backendStartTime = Date.now();
-        const result = await aiDetectionService.detectHarmfulContent(
-          extractedText,
-          captureData.width,
-          captureData.height
-        );
-        const backendTime = Date.now() - backendStartTime;
-        const totalTime = Date.now() - startTime;
+        
+        try {
+          // CRITICAL: Final check before backend call
+          if (!isProcessingRef.current) {
+            console.log(`🚫 [${timestamp}] Processing was cancelled before backend call - aborting (ID: ${processingId})`);
+            clearTimeout(processingTimeout);
+            return;
+          }
 
-        console.log(`📊 [${timestamp}] Complete analysis (${totalTime}ms):`);
-        console.log(`   🏷️ Category: ${result.category}`);
-        console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
-        console.log(`   🚨 Harmful: ${result.harmful ? 'YES' : 'NO'}`);
-        console.log(`   🎯 Action: ${result.action}`);
-        console.log(`   ⏱️ ML Kit: ${mlKitTime}ms | Backend: ${backendTime}ms | Total: ${totalTime}ms`);
-        console.log(`   🚀 Advantage: ${Math.round((800 / mlKitTime) * 10) / 10}x faster than Google Vision API`);
+          const result = await aiDetectionService.detectHarmfulContent(
+            extractedText,
+            captureData.width,
+            captureData.height
+          );
+          
+          // CRITICAL: Always process the result, even if timeout occurred
+          // The finally block will handle proper cleanup and loop continuation
+          console.log(`🎉 [${timestamp}] Backend request completed successfully! (ID: ${processingId})`);
+          console.log(`🎉 [${timestamp}] Result received: ${result.category} (${result.confidence})`);
+          
+          const backendTime = Date.now() - backendStartTime;
+          const totalTime = Date.now() - startTime;
 
-        // Update stats
-        setStats(prev => ({
-          ...prev,
-          successfulClassifications: prev.successfulClassifications + 1,
-          averageBackendTime: (prev.averageBackendTime * prev.successfulClassifications + backendTime) / (prev.successfulClassifications + 1),
-          lastClassification: result.category,
-        }));
-
-        // Handle the analysis result
-        if (result.harmful && result.action === 'scroll') {
-          console.log(`⚠️ [${timestamp}] 🚫 HARMFUL CONTENT DETECTED - SCROLL ACTION`);
-          console.log(`   📝 Text: "${extractedText}"`);
+          console.log(`📊 [${timestamp}] Complete analysis (${totalTime}ms) (ID: ${processingId}):`);
           console.log(`   🏷️ Category: ${result.category}`);
           console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
-          // TODO: Trigger scroll action
-        } else if (result.harmful && result.action === 'blur') {
-          console.log(`⚠️ [${timestamp}] 🚫 HARMFUL CONTENT DETECTED - BLUR ACTION`);
-          console.log(`   📝 Text: "${extractedText}"`);
-          console.log(`   🏷️ Category: ${result.category}`);
-          console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
-          // TODO: Trigger blur action
-        } else {
-          console.log(`✅ [${timestamp}] Content safe - continuing`);
+          console.log(`   🚨 Harmful: ${result.harmful ? 'YES' : 'NO'}`);
+          console.log(`   🎯 Action: ${result.action}`);
+          console.log(`   ⏱️ ML Kit: ${mlKitTime}ms | Backend: ${backendTime}ms | Total: ${totalTime}ms`);
+          console.log(`   🚀 Advantage: ${Math.round((800 / mlKitTime) * 10) / 10}x faster than Google Vision API`);
+
+          // Update stats
+          setStats(prev => ({
+            ...prev,
+            successfulClassifications: prev.successfulClassifications + 1,
+            averageBackendTime: (prev.averageBackendTime * prev.successfulClassifications + backendTime) / (prev.successfulClassifications + 1),
+            lastClassification: result.category,
+          }));
+
+          // Handle the analysis result - CRITICAL FIX: Show popup for ANY harmful content
+          if (result.harmful) {
+            console.log(`⚠️ [${timestamp}] 🚫 HARMFUL CONTENT DETECTED (ID: ${processingId})`);
+            console.log(`   📝 Text: "${extractedText}"`);
+            console.log(`   🏷️ Category: ${result.category}`);
+            console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
+            console.log(`   🎯 Action: ${result.action}`);
+            
+            // CRITICAL: Show popup immediately - don't wait
+            console.log(`🚨 [${timestamp}] SHOWING HARMFUL CONTENT POPUP NOW (ID: ${processingId})`);
+            Alert.alert(
+              '⚠️ Harmful Content Detected',
+              `Category: ${result.category}\nConfidence: ${(result.confidence * 100).toFixed(1)}%\n\nText: "${extractedText.substring(0, 100)}${extractedText.length > 100 ? '...' : ''}"\n\nRecommendation: ${result.recommendation}`,
+              [
+                { 
+                  text: 'Continue Monitoring', 
+                  style: 'cancel',
+                  onPress: () => {
+                    console.log(`✅ [${timestamp}] User chose to continue monitoring (ID: ${processingId})`);
+                  }
+                },
+                { 
+                  text: 'Stop Capture', 
+                  onPress: () => {
+                    console.log(`🛑 [${timestamp}] User chose to stop capture (ID: ${processingId})`);
+                    stopCapture();
+                  }
+                }
+              ]
+            );
+            console.log(`✅ [${timestamp}] POPUP DISPLAYED SUCCESSFULLY (ID: ${processingId})`);
+            
+            // TODO: Implement scroll/blur actions based on result.action
+            if (result.action === 'scroll') {
+              console.log(`🔄 [${timestamp}] TODO: Trigger scroll action`);
+            } else if (result.action === 'blur') {
+              console.log(`🔄 [${timestamp}] TODO: Trigger blur action`);
+            }
+          } else {
+            console.log(`✅ [${timestamp}] Content safe - continuing (ID: ${processingId})`);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorName = error instanceof Error ? error.name : 'UnknownError';
+          
+          if (errorMessage?.includes('cancelled') || errorName === 'AbortError') {
+            console.log(`🚫 [${timestamp}] Backend request cancelled due to scroll - this is expected (ID: ${processingId})`);
+            clearTimeout(processingTimeout);
+            return; // Exit early, don't continue loop
+          } else {
+            console.error(`❌ [${timestamp}] Backend classification failed (ID: ${processingId}):`, error);
+            // Continue with loop even if backend fails
+          }
         }
 
       } else {
-        console.log(`⏭️ [${timestamp}] No meaningful text extracted (${extractedText.length} chars), skipping backend analysis`);
+        console.log(`⏭️ [${timestamp}] No meaningful text extracted (${extractedText.length} chars), skipping backend analysis (ID: ${processingId})`);
       }
 
     } catch (error) {
       const errorTimestamp = new Date().toISOString();
-      console.error(`❌ [${errorTimestamp}] Error in merged processing:`, error);
+      console.error(`❌ [${errorTimestamp}] Error in merged processing (ID: ${processingId}):`, error);
       // Continue loop even if processing fails
     } finally {
+      // Clear the timeout
+      clearTimeout(processingTimeout);
+      
       setIsProcessing(false);
       isProcessingRef.current = false;
 
-      // CRITICAL: Continue the loop after processing with PROPER DELAY
+      // CRITICAL: Always trigger next capture if loop is active, regardless of app state
       if (captureLoopRef.current) {
         const nextTimestamp = new Date().toISOString();
-        console.log(`🔄 [${nextTimestamp}] Triggering next capture...`);
-        // MUCH LONGER delay to create true sequential processing
-        setTimeout(() => {
+        console.log(`🔄 [${nextTimestamp}] Processing complete - immediately triggering next capture (ID: ${processingId})`);
+        console.log(`🔄 [${nextTimestamp}] → captureLoopRef.current: ${captureLoopRef.current}`);
+        console.log(`🔄 [${nextTimestamp}] → This should continue the monitoring loop`);
+        
+        // ZERO DELAYS: Immediate next capture
+        console.log(`🎯 [${nextTimestamp}] → Triggering next capture NOW (ID: ${processingId})`);
+        
+        // Immediate trigger without setTimeout
+        if (captureLoopRef.current && !isProcessingRef.current) {
           triggerNextCapture();
-        }, 5000); // 5 second delay between complete cycles
+        } else if (isProcessingRef.current) {
+          console.log(`🚫 [${nextTimestamp}] → Not triggering - already processing another capture`);
+        }
+      } else {
+        console.log(`🛑 [${timestamp}] Capture loop stopped, not triggering next capture (ID: ${processingId})`);
+        console.log(`🛑 [${timestamp}] → captureLoopRef.current: ${captureLoopRef.current}`);
+        console.log(`🛑 [${timestamp}] → User manually stopped capture`);
       }
     }
-  }, [triggerNextCapture, smartCaptureEnabled]);
+  }, [triggerNextCapture, smartCaptureEnabled, stopCapture]);
 
   const sendToBackend = async () => {
     if (!lastCapture) {
@@ -667,6 +926,16 @@ export default function ScreenCaptureScreen() {
           value={stats.capturesSkipped}
           color={'#9E9E9E'}
         />
+        <StatusCard
+          title="Scrolls Detected"
+          value={stats.scrollDetectionCount}
+          color={'#FF9800'}
+        />
+        <StatusCard
+          title="Pipeline Resets"
+          value={stats.pipelineResetCount}
+          color={'#2196F3'}
+        />
       </View>
 
       {/* Control Buttons */}
@@ -766,6 +1035,23 @@ export default function ScreenCaptureScreen() {
             <Text style={styles.buttonText}>🛑 Stop Capture</Text>
           </TouchableOpacity>
         )}
+
+        {captureLoop && (
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: '#2196F3', marginTop: 8 }]}
+            onPress={() => {
+              if (!isProcessingRef.current) {
+                console.log('🎯 MANUAL TRIGGER: Forcing capture now');
+                triggerNextCapture();
+                Alert.alert('Triggered', 'Manual capture triggered - check logs');
+              } else {
+                Alert.alert('Processing', 'Already processing a capture, please wait');
+              }
+            }}
+          >
+            <Text style={styles.buttonText}>🎯 Trigger Capture Now</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* App Detection Info */}
@@ -816,6 +1102,35 @@ export default function ScreenCaptureScreen() {
               {stats.appChangeCount}
             </Text>
           </View>
+
+          <View style={styles.appDetectionRow}>
+            <Text style={[styles.appDetectionLabel, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+              Scrolls Detected:
+            </Text>
+            <Text style={[styles.appDetectionValue, { color: '#FF9800' }]}>
+              {stats.scrollDetectionCount}
+            </Text>
+          </View>
+
+          <View style={styles.appDetectionRow}>
+            <Text style={[styles.appDetectionLabel, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+              Pipeline Resets:
+            </Text>
+            <Text style={[styles.appDetectionValue, { color: '#2196F3' }]}>
+              {stats.pipelineResetCount}
+            </Text>
+          </View>
+
+          {stats.lastScrollTime > 0 && (
+            <View style={styles.appDetectionRow}>
+              <Text style={[styles.appDetectionLabel, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+                Last Scroll:
+              </Text>
+              <Text style={[styles.appDetectionValue, { color: isDark ? '#9BA1A6' : '#687076' }]}>
+                {new Date(stats.lastScrollTime).toLocaleTimeString()}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -920,7 +1235,135 @@ export default function ScreenCaptureScreen() {
         >
           <Text style={styles.buttonText}>📡 Test Backend Connection</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#FF9800' }]}
+          onPress={async () => {
+            try {
+              const result = await AppDetectionModule.getScrollDetectionStats();
+              Alert.alert('Scroll Detection Stats', 
+                `Scrolls Detected: ${result.scrollDetectionCount}\n` +
+                `Last Scroll: ${result.lastScrollTime > 0 ? new Date(result.lastScrollTime).toLocaleTimeString() : 'Never'}\n` +
+                `Current App: ${result.currentApp}\n` +
+                `Monitored: ${result.isMonitoredApp ? 'Yes' : 'No'}`
+              );
+            } catch (error) {
+              Alert.alert('Error', 'Failed to get scroll detection stats');
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>📜 Check Scroll Stats</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#9C27B0' }]}
+          onPress={async () => {
+            try {
+              await AppDetectionModule.resetPipelineOnScroll();
+              Alert.alert('Pipeline Reset', 'Capture pipeline has been manually reset');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to reset pipeline');
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>🔄 Manual Pipeline Reset</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#E91E63' }]}
+          onPress={async () => {
+            try {
+              await AppDetectionModule.reconnectScrollDetection();
+              Alert.alert('Success', 'Scroll detection callbacks reconnected');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to reconnect scroll detection');
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>🔗 Reconnect Scroll Detection</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#FF5722' }]}
+          onPress={() => {
+            const debugInfo = `
+Capture Loop State:
+- captureLoop: ${captureLoop}
+- captureLoopRef.current: ${captureLoopRef.current}
+- isProcessing: ${isProcessing}
+- isProcessingRef.current: ${isProcessingRef.current}
+
+App State:
+- currentApp: ${stats.currentAppName}
+- isMonitored: ${stats.isMonitoredApp}
+- smartCaptureEnabled: ${smartCaptureEnabled}
+
+Stats:
+- totalCaptures: ${stats.totalCaptures}
+- capturesSkipped: ${stats.capturesSkipped}
+- scrollDetectionCount: ${stats.scrollDetectionCount}
+- pipelineResetCount: ${stats.pipelineResetCount}
+            `.trim();
+            
+            console.log('🔍 DEBUG STATE:', debugInfo);
+            Alert.alert('Debug State', debugInfo);
+          }}
+        >
+          <Text style={styles.buttonText}>🔍 Debug State</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
+          onPress={() => {
+            if (captureLoopRef.current && !isProcessingRef.current) {
+              console.log('🎯 Manual trigger: Forcing next capture');
+              triggerNextCapture();
+              Alert.alert('Success', 'Manually triggered next capture');
+            } else {
+              Alert.alert('Cannot Trigger', `Loop: ${captureLoopRef.current}, Processing: ${isProcessingRef.current}`);
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>🎯 Force Next Capture</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#FF9800' }]}
+          onPress={async () => {
+            try {
+              console.log('🌐 Testing backend connectivity...');
+              const response = await fetch('http://192.168.100.55:3000/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  extracted_text: 'test message',
+                  width: 1080,
+                  height: 2400,
+                  timestamp: Date.now(),
+                  source: 'test'
+                })
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Backend test successful:', data);
+                Alert.alert('Success', 'Backend is reachable and responding');
+              } else {
+                console.log('❌ Backend test failed:', response.status);
+                Alert.alert('Error', `Backend returned ${response.status}`);
+              }
+            } catch (error) {
+              console.error('❌ Backend test error:', error);
+              Alert.alert('Network Error', 'Cannot reach backend server');
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>🌐 Test Backend</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Bitmap Memory Monitor */}
+      <BitmapMemoryMonitor />
     </ScrollView>
   );
 }

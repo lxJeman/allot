@@ -45,10 +45,114 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var lastCapturedBitmap: android.graphics.Bitmap? = null // HOT PATH: Direct bitmap storage
         private var pendingCapturePromise: Promise? = null // Store pending promise
         private var backgroundThread: HandlerThread? = null
+        
+        // Bitmap memory pool for reuse
+        private val bitmapPool = mutableListOf<Bitmap>()
+        private const val MAX_POOL_SIZE = 3
+        private var totalBitmapMemory = 0L
+        private const val MAX_BITMAP_MEMORY = 50 * 1024 * 1024L // 50MB limit
     }
 
     override fun getName(): String {
         return "ScreenCaptureModule"
+    }
+
+    /**
+     * Safely recycle the last captured bitmap to prevent memory leaks
+     */
+    private fun recycleLastBitmap() {
+        lastCapturedBitmap?.let { bitmap ->
+            if (!bitmap.isRecycled) {
+                Log.d(TAG, "♻️ Recycling last bitmap: ${bitmap.width}x${bitmap.height}")
+                
+                // Calculate memory being freed
+                val memoryFreed = bitmap.allocationByteCount.toLong()
+                totalBitmapMemory -= memoryFreed
+                
+                // Try to return to pool if it's reusable
+                if (bitmapPool.size < MAX_POOL_SIZE && bitmap.isMutable) {
+                    Log.d(TAG, "🔄 Returning bitmap to pool (${bitmapPool.size + 1}/$MAX_POOL_SIZE)")
+                    bitmapPool.add(bitmap)
+                    totalBitmapMemory += memoryFreed // Add back to pool memory
+                } else {
+                    // Pool is full or bitmap not reusable, recycle it
+                    bitmap.recycle()
+                    Log.d(TAG, "♻️ Bitmap recycled, freed ${memoryFreed / 1024}KB")
+                }
+            } else {
+                Log.w(TAG, "⚠️ Attempted to recycle already recycled bitmap")
+            }
+            lastCapturedBitmap = null
+        }
+    }
+
+    /**
+     * Get a bitmap from the pool or create a new one
+     */
+    private fun getBitmapFromPool(width: Int, height: Int, config: Bitmap.Config): Bitmap {
+        // Check if we have a suitable bitmap in the pool
+        val iterator = bitmapPool.iterator()
+        while (iterator.hasNext()) {
+            val pooledBitmap = iterator.next()
+            if (!pooledBitmap.isRecycled && 
+                pooledBitmap.width == width && 
+                pooledBitmap.height == height && 
+                pooledBitmap.config == config) {
+                
+                iterator.remove()
+                Log.d(TAG, "🔄 Reusing bitmap from pool (${bitmapPool.size}/$MAX_POOL_SIZE remaining)")
+                return pooledBitmap
+            }
+        }
+        
+        // No suitable bitmap in pool, create new one
+        val newBitmap = Bitmap.createBitmap(width, height, config)
+        val memoryUsed = newBitmap.allocationByteCount.toLong()
+        totalBitmapMemory += memoryUsed
+        
+        Log.d(TAG, "🆕 Created new bitmap: ${width}x${height}, memory: ${memoryUsed / 1024}KB, total: ${totalBitmapMemory / 1024 / 1024}MB")
+        
+        // Check if we're approaching memory limit
+        if (totalBitmapMemory > MAX_BITMAP_MEMORY) {
+            Log.w(TAG, "⚠️ Bitmap memory usage high: ${totalBitmapMemory / 1024 / 1024}MB, cleaning pool...")
+            cleanBitmapPool()
+        }
+        
+        return newBitmap
+    }
+
+    /**
+     * Clean the bitmap pool to free memory
+     */
+    private fun cleanBitmapPool() {
+        val iterator = bitmapPool.iterator()
+        var freedMemory = 0L
+        
+        while (iterator.hasNext()) {
+            val bitmap = iterator.next()
+            if (!bitmap.isRecycled) {
+                freedMemory += bitmap.allocationByteCount.toLong()
+                bitmap.recycle()
+            }
+            iterator.remove()
+        }
+        
+        totalBitmapMemory -= freedMemory
+        Log.d(TAG, "🧹 Cleaned bitmap pool, freed ${freedMemory / 1024}KB, total memory: ${totalBitmapMemory / 1024 / 1024}MB")
+    }
+
+    /**
+     * Monitor bitmap memory usage and log warnings
+     */
+    private fun logBitmapMemoryUsage() {
+        val memoryMB = totalBitmapMemory / 1024 / 1024
+        val poolSize = bitmapPool.size
+        
+        if (memoryMB > 30) { // Warn at 30MB
+            Log.w(TAG, "⚠️ High bitmap memory usage: ${memoryMB}MB, pool size: $poolSize")
+        } else {
+            Log.d(TAG, "📊 Bitmap memory: ${memoryMB}MB, pool size: $poolSize")
+        }
     }
 
     @ReactMethod
@@ -317,13 +421,12 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             if (frame != null) {
                 Log.d(TAG, "📸 Returning last captured frame: ${frame.width}x${frame.height}")
 
-                val result =
-                        Arguments.createMap().apply {
-                            putString("base64", frame.base64)
-                            putInt("width", frame.width)
-                            putInt("height", frame.height)
-                            putDouble("timestamp", frame.timestamp.toDouble())
-                        }
+                val result = Arguments.createMap().apply {
+                    putString("base64", frame.base64)
+                    putInt("width", frame.width)
+                    putInt("height", frame.height)
+                    putDouble("timestamp", frame.timestamp.toDouble())
+                }
 
                 promise.resolve(result)
             } else {
@@ -332,6 +435,59 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             Log.e(TAG, "Error getting last frame: ${e.message}", e)
             promise.reject("GET_FRAME_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getBitmapMemoryStats(promise: Promise) {
+        try {
+            val stats = Arguments.createMap().apply {
+                putDouble("totalMemoryMB", totalBitmapMemory / 1024.0 / 1024.0)
+                putInt("poolSize", bitmapPool.size)
+                putInt("maxPoolSize", MAX_POOL_SIZE)
+                putDouble("maxMemoryMB", MAX_BITMAP_MEMORY / 1024.0 / 1024.0)
+                putBoolean("hasLastBitmap", lastCapturedBitmap != null)
+                
+                lastCapturedBitmap?.let { bitmap ->
+                    if (!bitmap.isRecycled) {
+                        putInt("lastBitmapWidth", bitmap.width)
+                        putInt("lastBitmapHeight", bitmap.height)
+                        putDouble("lastBitmapSizeMB", bitmap.allocationByteCount / 1024.0 / 1024.0)
+                    }
+                }
+            }
+            
+            Log.d(TAG, "📊 Bitmap memory stats requested - Total: ${totalBitmapMemory / 1024 / 1024}MB, Pool: ${bitmapPool.size}")
+            promise.resolve(stats)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting bitmap memory stats: ${e.message}", e)
+            promise.reject("STATS_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun forceBitmapCleanup(promise: Promise) {
+        try {
+            Log.d(TAG, "🧹 Forcing bitmap cleanup...")
+            val beforeMemory = totalBitmapMemory
+            
+            recycleLastBitmap()
+            cleanBitmapPool()
+            
+            val afterMemory = totalBitmapMemory
+            val freedMemory = beforeMemory - afterMemory
+            
+            Log.d(TAG, "✅ Forced cleanup completed, freed ${freedMemory / 1024}KB")
+            
+            val result = Arguments.createMap().apply {
+                putDouble("freedMemoryKB", freedMemory / 1024.0)
+                putDouble("remainingMemoryMB", afterMemory / 1024.0 / 1024.0)
+            }
+            
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during forced cleanup: ${e.message}", e)
+            promise.reject("CLEANUP_ERROR", e.message)
         }
     }
 
@@ -445,54 +601,72 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             val rowStride = planes[0].rowStride
             val rowPadding = rowStride - pixelStride * image.width
 
-            // Create bitmap from image
-            val bitmap =
-                    Bitmap.createBitmap(
-                            image.width + rowPadding / pixelStride,
-                            image.height,
-                            Bitmap.Config.ARGB_8888
-                    )
+            // CRITICAL: Recycle previous bitmap before creating new one
+            recycleLastBitmap()
+
+            // Create bitmap from image using memory pool
+            val bitmap = getBitmapFromPool(
+                image.width + rowPadding / pixelStride,
+                image.height,
+                Bitmap.Config.ARGB_8888
+            )
+            
             bitmap.copyPixelsFromBuffer(buffer)
 
             // Crop to actual screen size if needed
-            val croppedBitmap =
-                    if (rowPadding != 0) {
-                        Bitmap.createBitmap(bitmap, 0, 0, image.width, image.height)
-                    } else {
-                        bitmap
-                    }
+            val croppedBitmap = if (rowPadding != 0) {
+                val cropped = getBitmapFromPool(image.width, image.height, Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(cropped)
+                canvas.drawBitmap(bitmap, 0f, 0f, null)
+                
+                // Return original bitmap to pool since we created a cropped version
+                if (bitmapPool.size < MAX_POOL_SIZE && bitmap.isMutable && !bitmap.isRecycled) {
+                    bitmapPool.add(bitmap)
+                } else {
+                    bitmap.recycle()
+                    totalBitmapMemory -= bitmap.allocationByteCount.toLong()
+                }
+                
+                cropped
+            } else {
+                bitmap
+            }
 
             // Store bitmap for HOT PATH (direct bitmap access)
+            // CRITICAL: This is now managed by recycleLastBitmap()
             lastCapturedBitmap = croppedBitmap
 
             // Convert to Base64 for COLD PATH (React Native bridge)
             val base64 = bitmapToBase64(croppedBitmap, 80) // 80% JPEG quality
 
-            // Save to cache (optional)
+            // Save to cache (optional) - use a copy to avoid holding reference
             val cacheFile = saveBitmapToCache(croppedBitmap)
 
             val timestamp = System.currentTimeMillis()
 
             // Store last captured frame for native backend
-            lastCapturedFrame =
-                    ScreenCaptureService.CapturedFrame(
-                            base64 = base64,
-                            width = image.width,
-                            height = image.height,
-                            timestamp = timestamp
-                    )
+            lastCapturedFrame = ScreenCaptureService.CapturedFrame(
+                base64 = base64,
+                width = image.width,
+                height = image.height,
+                timestamp = timestamp
+            )
 
             Log.v(TAG, "📸 Frame captured: ${image.width}x${image.height} at $timestamp")
 
+            // Log memory usage periodically (every 10th capture)
+            if (timestamp % 10000 < 1000) { // Roughly every 10 seconds
+                logBitmapMemoryUsage()
+            }
+
             // Send to React Native (if available)
-            val params =
-                    Arguments.createMap().apply {
-                        putString("base64", base64)
-                        putString("filePath", cacheFile?.absolutePath)
-                        putInt("width", image.width)
-                        putInt("height", image.height)
-                        putDouble("timestamp", timestamp.toDouble())
-                    }
+            val params = Arguments.createMap().apply {
+                putString("base64", base64)
+                putString("filePath", cacheFile?.absolutePath)
+                putInt("width", image.width)
+                putInt("height", image.height)
+                putDouble("timestamp", timestamp.toDouble())
+            }
 
             sendEvent("onScreenCaptured", params)
 
@@ -501,23 +675,20 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             if (promise != null) {
                 pendingCapturePromise = null
 
-                val result =
-                        Arguments.createMap().apply {
-                            putString("base64", base64)
-                            putInt("width", image.width)
-                            putInt("height", image.height)
-                            putDouble("timestamp", timestamp.toDouble())
-                        }
+                val result = Arguments.createMap().apply {
+                    putString("base64", base64)
+                    putInt("width", image.width)
+                    putInt("height", image.height)
+                    putDouble("timestamp", timestamp.toDouble())
+                }
 
                 Log.d(TAG, "✅ Frame captured and promise resolved: ${image.width}x${image.height}")
                 promise.resolve(result)
             }
 
-            // Cleanup
-            if (croppedBitmap != bitmap) {
-                bitmap.recycle()
-            }
-            croppedBitmap.recycle()
+            // NOTE: We don't recycle croppedBitmap here because it's stored in lastCapturedBitmap
+            // It will be recycled when the next frame is processed or when cleanup is called
+
         } catch (e: Exception) {
             Log.e(TAG, "Error processing captured image: ${e.message}", e)
 
@@ -636,6 +807,14 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
     }
 
     private fun cleanupCapture() {
+        Log.d(TAG, "🧹 Starting capture cleanup...")
+        
+        // CRITICAL: Recycle bitmap before cleanup
+        recycleLastBitmap()
+        
+        // Clean the entire bitmap pool
+        cleanBitmapPool()
+        
         virtualDisplay?.release()
         virtualDisplay = null
 
@@ -645,8 +824,27 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         mediaProjection?.stop()
         mediaProjection = null
 
-        backgroundThread?.quitSafely()
+        // Ensure background thread is properly terminated
+        backgroundThread?.let { thread ->
+            try {
+                thread.quitSafely()
+                // Wait for thread to finish (with timeout)
+                thread.join(2000) // Wait max 2 seconds
+                if (thread.isAlive) {
+                    Log.w(TAG, "⚠️ Background thread didn't terminate gracefully, forcing interrupt")
+                    thread.interrupt()
+                }
+            } catch (e: InterruptedException) {
+                Log.w(TAG, "Thread cleanup interrupted: ${e.message}")
+                Thread.currentThread().interrupt() // Restore interrupt status
+            }
+        }
         backgroundThread = null
+        
+        // Reset memory tracking
+        totalBitmapMemory = 0L
+        
+        Log.d(TAG, "✅ Capture cleanup completed")
     }
 
     private fun createNotificationChannel() {
