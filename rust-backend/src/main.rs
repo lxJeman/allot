@@ -786,13 +786,17 @@ fn filter_overlay_text(text: &str) -> String {
 }
 
 fn normalize_text(text: &str) -> String {
+    // Less aggressive normalization to preserve content differences
+    // Keep more characters to distinguish between different screens
     text.chars()
-        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace() || ".,!?-_()[]{}".contains(*c))
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<&str>>()
         .join(" ")
         .to_lowercase()
+        // Add position-aware hashing by including character positions
+        + &format!("_len{}_pos{}", text.len(), text.chars().take(10).collect::<String>().len())
 }
 
 fn calculate_hash(text: &str) -> String {

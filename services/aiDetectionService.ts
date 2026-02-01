@@ -221,6 +221,8 @@ class AIDetectionService {
    * Classify extracted text using Rust backend (Groq API)
    */
   private async classifyTextWithBackend(extractedText: string, imageWidth?: number, imageHeight?: number, requestId?: string): Promise<DetectionResult> {
+    const startTime = Date.now();
+    
     // Check if cancelled before making request
     if (requestId && this.cancelledRequests.has(requestId)) {
       throw new Error('Request cancelled before backend call');
@@ -233,9 +235,10 @@ class AIDetectionService {
     const timeoutId = setTimeout(() => {
       console.log(`⏰ [AI Detection] Network timeout - aborting request (ID: ${requestId})`);
       controller.abort();
-    }, 2000); // 2 second network timeout - backend responds in 400ms, so 2s is safe
+    }, 5000); // 5 second network timeout - give backend enough time
     
     try {
+      const classificationStartTime = Date.now();
       const response = await fetch(`${BACKEND_URL}/analyze`, {
         method: 'POST',
         headers: {
@@ -264,6 +267,7 @@ class AIDetectionService {
       }
 
       const data = await response.json();
+      const classificationTime = Date.now() - classificationStartTime;
 
       console.log(`✅ [AI Detection] Backend response received (ID: ${requestId})`);
 

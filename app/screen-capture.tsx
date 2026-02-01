@@ -632,6 +632,13 @@ export default function ScreenCaptureScreen() {
     setIsProcessing(true);
     isProcessingRef.current = true;
     
+    // Notify native side that processing started (to disable frame caching)
+    try {
+      await ScreenCaptureModule.notifyProcessingStarted();
+    } catch (error) {
+      console.warn('Failed to notify processing started:', error);
+    }
+    
     // Set a timeout to prevent getting stuck in processing
     const processingTimeout = setTimeout(() => {
       console.log(`⏰ [${timestamp}] PROCESSING TIMEOUT - Forcing reset after 30 seconds (ID: ${processingId})`);
@@ -640,7 +647,7 @@ export default function ScreenCaptureScreen() {
       // Mark as cancelled but don't reset processing flags yet
       // Let the finally block handle the cleanup and restart
       console.log(`⏰ [${timestamp}] Marking request as cancelled - finally block will handle restart`);
-    }, 5000); // 5 second timeout - backend should respond in <1 second
+    }, 10000); // 10 second timeout - backend responds in <1 second, network timeout is 5s
     
     try {
       console.log(`🤖 [${timestamp}] Starting Local ML Kit text extraction... (ID: ${processingId})`);
@@ -791,6 +798,13 @@ export default function ScreenCaptureScreen() {
     } finally {
       // Clear the timeout
       clearTimeout(processingTimeout);
+      
+      // Notify native side that processing ended (to re-enable frame caching)
+      try {
+        await ScreenCaptureModule.notifyProcessingEnded();
+      } catch (error) {
+        console.warn('Failed to notify processing ended:', error);
+      }
       
       setIsProcessing(false);
       isProcessingRef.current = false;

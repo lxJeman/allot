@@ -48,6 +48,10 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         
         // Bitmap memory pool for reuse
         private val bitmapPool = mutableListOf<Bitmap>()
+        
+        // Track if we're actively monitoring (to disable aggressive caching)
+        private var lastProcessingStartTime = 0L
+        private var isCurrentlyProcessing = false
         private const val MAX_POOL_SIZE = 3
         private var totalBitmapMemory = 0L
         private const val MAX_BITMAP_MEMORY = 50 * 1024 * 1024L // 50MB limit
@@ -83,6 +87,59 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                 Log.w(TAG, "⚠️ Attempted to recycle already recycled bitmap")
             }
             lastCapturedBitmap = null
+        }
+    }
+
+    /**
+     * Check if we're actively monitoring and should avoid aggressive frame caching
+     */
+    private fun isActivelyMonitoring(): Boolean {
+        val currentTime = System.currentTimeMillis()
+        
+        // If we're currently processing, we're actively monitoring
+        if (isCurrentlyProcessing) {
+            return true
+        }
+        
+        // If we recently started processing (within last 30 seconds), we're likely monitoring
+        if (lastProcessingStartTime > 0 && (currentTime - lastProcessingStartTime) < 30000) {
+            return true
+        }
+        
+        // If capture interval is fast (< 2 seconds), we're likely monitoring
+        if (captureInterval < 2000) {
+            return true
+        }
+        
+        return false
+    }
+
+    /**
+     * Notify native side that processing has started
+     */
+    @ReactMethod
+    fun notifyProcessingStarted(promise: Promise) {
+        try {
+            isCurrentlyProcessing = true
+            lastProcessingStartTime = System.currentTimeMillis()
+            Log.d(TAG, "🔄 Processing started - disabling aggressive frame caching")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("PROCESSING_NOTIFY_ERROR", e.message)
+        }
+    }
+
+    /**
+     * Notify native side that processing has ended
+     */
+    @ReactMethod
+    fun notifyProcessingEnded(promise: Promise) {
+        try {
+            isCurrentlyProcessing = false
+            Log.d(TAG, "✅ Processing ended - re-enabling frame caching")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("PROCESSING_NOTIFY_ERROR", e.message)
         }
     }
 
@@ -325,10 +382,17 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             Log.d(TAG, "🎯 Requesting next frame capture...")
 
             // Check if we have a recent frame (within 200ms for faster response)
+            // BUT only if we're not in a monitoring scenario where content changes rapidly
             val frame = lastCapturedFrame
             val currentTime = System.currentTimeMillis()
 
-            if (frame != null && (currentTime - frame.timestamp) < 200) {
+            // Disable frame caching during active monitoring to ensure fresh captures
+            // This prevents returning stale frames when content is changing (scrolling, etc.)
+            val shouldUseCache = frame != null && 
+                                (currentTime - frame.timestamp) < 200 &&
+                                !isActivelyMonitoring()
+
+            if (shouldUseCache) {
                 // We have a very recent frame, return it immediately
                 Log.d(TAG, "⚡ Returning very recent frame: ${frame.width}x${frame.height}")
 
@@ -342,6 +406,8 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
                 promise.resolve(result)
                 return
+            } else if (frame != null && (currentTime - frame.timestamp) < 200) {
+                Log.d(TAG, "🔄 Fresh frame needed - actively monitoring, forcing new capture")
             }
 
             // No recent frame, wait for a new one (should be very fast now)
