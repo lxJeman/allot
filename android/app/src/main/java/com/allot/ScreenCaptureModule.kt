@@ -258,9 +258,6 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                             reactApplicationContext.startService(serviceIntent)
                         }
 
-                        // Give service time to start
-                        Thread.sleep(500)
-
                         // 3. Create MediaProjection with stored permission data
                         Log.d(
                                 TAG,

@@ -146,27 +146,27 @@ export default function Phase4DemoScreen() {
     
     try {
       const startTime = Date.now();
-      console.log('🚀 Sending to backend for analysis...');
+      console.log('🚀 Sending to backend for analysis using NATIVE HTTP CLIENT...');
       
-      // Send to backend
-      const response = await fetch('http://192.168.100.55:3000/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Import native HTTP client
+      const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+      
+      // Send to backend using native HTTP client
+      const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+        body: {
           image: data.base64,
           width: data.width,
           height: data.height,
           timestamp: data.timestamp,
-        }),
+        },
+        timeout: 2000,
       });
       
-      if (!response.ok) {
-        throw new Error(`Backend error: ${response.status}`);
+      if (!response.success) {
+        throw new Error(`Backend error: HTTP ${response.status} - ${response.error}`);
       }
       
-      const result = await response.json();
+      const result = JSON.parse(response.data!);
       const processingTime = Date.now() - startTime;
       
       console.log('📊 Analysis result:', {

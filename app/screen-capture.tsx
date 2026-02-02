@@ -246,9 +246,11 @@ export default function ScreenCaptureScreen() {
           if (captureLoopRef.current) {
             console.log(`🔄 [${skipTimestamp}] → IMMEDIATELY continuing capture loop after skip`);
             console.log(`🔄 [${skipTimestamp}] → Processing state: ${isProcessingRef.current}`);
+            console.log(`🔄 [${skipTimestamp}] → About to call triggerNextCapture()`);
             
             // CRITICAL FIX: Always trigger next capture immediately
             if (captureLoopRef.current && !isProcessingRef.current) {
+              console.log(`🎯 [${skipTimestamp}] → CALLING triggerNextCapture() now`);
               triggerNextCapture();
             } else if (isProcessingRef.current) {
               console.log(`🚫 [${skipTimestamp}] → Not triggering - already processing another capture`);
@@ -506,6 +508,8 @@ export default function ScreenCaptureScreen() {
     
     try {
       console.log(`🎯 [${timestamp}] Calling captureNextFrame...`);
+      console.log(`🎯 [${timestamp}] → captureLoopRef.current: ${captureLoopRef.current}`);
+      console.log(`🎯 [${timestamp}] → isProcessingRef.current: ${isProcessingRef.current}`);
       await ScreenCaptureModule.captureNextFrame();
       console.log(`✅ [${timestamp}] captureNextFrame completed`);
     } catch (error) {
@@ -638,16 +642,6 @@ export default function ScreenCaptureScreen() {
     } catch (error) {
       console.warn('Failed to notify processing started:', error);
     }
-    
-    // Set a timeout to prevent getting stuck in processing
-    const processingTimeout = setTimeout(() => {
-      console.log(`⏰ [${timestamp}] PROCESSING TIMEOUT - Forcing reset after 30 seconds (ID: ${processingId})`);
-      console.log(`⏰ [${timestamp}] This means backend request is hanging or failed`);
-      
-      // Mark as cancelled but don't reset processing flags yet
-      // Let the finally block handle the cleanup and restart
-      console.log(`⏰ [${timestamp}] Marking request as cancelled - finally block will handle restart`);
-    }, 10000); // 10 second timeout - backend responds in <1 second, network timeout is 5s
     
     try {
       console.log(`🤖 [${timestamp}] Starting Local ML Kit text extraction... (ID: ${processingId})`);
@@ -796,9 +790,6 @@ export default function ScreenCaptureScreen() {
       console.error(`❌ [${errorTimestamp}] Error in merged processing (ID: ${processingId}):`, error);
       // Continue loop even if processing fails
     } finally {
-      // Clear the timeout
-      clearTimeout(processingTimeout);
-      
       // Notify native side that processing ended (to re-enable frame caching)
       try {
         await ScreenCaptureModule.notifyProcessingEnded();
@@ -866,27 +857,31 @@ export default function ScreenCaptureScreen() {
     if (!lastCapture) return;
 
     try {
-      console.log('🚀 Manual send to backend...');
-      const response = await fetch('http://192.168.100.55:3000/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      console.log('🚀 Manual send to backend using NATIVE HTTP CLIENT...');
+      
+      // Import native HTTP client
+      const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+      
+      const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+        body: {
           image: lastCapture.base64,
           width: lastCapture.width,
           height: lastCapture.height,
           timestamp: lastCapture.timestamp,
-        }),
+        },
+        timeout: 2000,
       });
 
-      const result = await response.json();
-      console.log('📊 Backend response:', result);
-
-      Alert.alert('Backend Response', JSON.stringify(result, null, 2));
-    } catch (error) {
+      if (response.success) {
+        const result = JSON.parse(response.data!);
+        console.log(`📊 Native HTTP Backend response in ${response.responseTime}ms:`, result);
+        Alert.alert('Backend Response', JSON.stringify(result, null, 2));
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.error}`);
+      }
+    } catch (error: any) {
       console.error('❌ Error sending to backend:', error);
-      Alert.alert('Backend Error', 'Failed to send to backend. Make sure the server is running and accessible');
+      Alert.alert('Backend Error', error.message || 'Failed to send to backend. Make sure the server is running and accessible');
     }
   };
 
@@ -1345,34 +1340,82 @@ Stats:
           style={[styles.testButton, { backgroundColor: '#FF9800' }]}
           onPress={async () => {
             try {
-              console.log('🌐 Testing backend connectivity...');
-              const response = await fetch('http://192.168.100.55:3000/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  extracted_text: 'test message',
+              console.log('🌐 Testing backend connectivity using NATIVE HTTP CLIENT...');
+              
+              // Import native HTTP client
+              const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+              
+              const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+                body: {
+                  extracted_text: 'test message from native HTTP client',
                   width: 1080,
                   height: 2400,
                   timestamp: Date.now(),
-                  source: 'test'
-                })
+                  source: 'native_http_backend_test'
+                },
+                timeout: 2000,
               });
               
-              if (response.ok) {
-                const data = await response.json();
-                console.log('✅ Backend test successful:', data);
-                Alert.alert('Success', 'Backend is reachable and responding');
+              if (response.success) {
+                const data = JSON.parse(response.data!);
+                console.log(`✅ Native HTTP Backend test successful in ${response.responseTime}ms:`, data);
+                Alert.alert('Success', `Backend reachable in ${response.responseTime}ms!\nCategory: ${data.analysis?.category || 'unknown'}`);
               } else {
-                console.log('❌ Backend test failed:', response.status);
-                Alert.alert('Error', `Backend returned ${response.status}`);
+                console.log('❌ Native HTTP Backend test failed:', response.status, response.error);
+                Alert.alert('Error', `Backend returned HTTP ${response.status}: ${response.error}`);
               }
-            } catch (error) {
-              console.error('❌ Backend test error:', error);
-              Alert.alert('Network Error', 'Cannot reach backend server');
+            } catch (error: any) {
+              console.error('❌ Native HTTP Backend test error:', error);
+              Alert.alert('Network Error', error.message || 'Cannot reach backend server');
             }
           }}
         >
-          <Text style={styles.buttonText}>🌐 Test Backend</Text>
+          <Text style={styles.buttonText}>🌐 Test Backend (Native HTTP)</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#00BCD4' }]}
+          onPress={async () => {
+            try {
+              console.log('🚀 Testing Native HTTP Bridge...');
+              
+              // Import the native HTTP client
+              const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+              
+              const startTime = Date.now();
+              
+              // Test the same backend endpoint
+              const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+                body: {
+                  extracted_text: 'Test message from native HTTP client',
+                  width: 720,
+                  height: 1600,
+                  timestamp: Date.now(),
+                  source: 'native_http_test',
+                },
+                timeout: 2000,
+              });
+              
+              const totalTime = Date.now() - startTime;
+              
+              if (response.success) {
+                const data = JSON.parse(response.data!);
+                Alert.alert(
+                  'Native HTTP Success! 🎉',
+                  `Response in ${totalTime}ms\nCategory: ${data.analysis?.category || 'unknown'}\nConfidence: ${(data.analysis?.confidence * 100 || 0).toFixed(1)}%`
+                );
+                console.log('✅ Native HTTP test successful:', data);
+              } else {
+                Alert.alert('Native HTTP Error', `HTTP ${response.status}: ${response.error}`);
+                console.error('❌ Native HTTP error:', response);
+              }
+            } catch (error: any) {
+              console.error('❌ Native HTTP test error:', error);
+              Alert.alert('Native HTTP Error', error.message || 'Unknown error');
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>⚡ Test Native HTTP</Text>
         </TouchableOpacity>
       </View>
 
