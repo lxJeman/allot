@@ -3,12 +3,36 @@
 LOCAL_IP=$(ip route get 1 | awk '{print $7}' | head -1)
 METRO_PORT=8081
 
-echo "🚀 Ultimate React Native Development Script (USB)"
-echo "================================================="
+echo "🚀 Allot Build & Development Script"
+echo "===================================="
 echo "💻 Computer IP: $LOCAL_IP"
 echo "🔌 Metro Port: $METRO_PORT"
-echo "📱 Connection: USB Debugging"
 echo ""
+
+# Function to get backend URL
+get_backend_url() {
+    if [ ! -z "$1" ]; then
+        echo "$1"
+    else
+        # Read from app.json
+        BACKEND_URL=$(node -e "const fs = require('fs'); const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8')); console.log(appJson.expo.extra?.backendUrl || 'http://192.168.100.55:3000');" 2>/dev/null)
+        echo "$BACKEND_URL"
+    fi
+}
+
+# Function to update backend URL in app.json
+update_backend_url() {
+    local BACKEND_URL="$1"
+    echo "🔧 Updating backend URL to: $BACKEND_URL"
+    node -e "
+const fs = require('fs');
+const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+appJson.expo.extra = appJson.expo.extra || {};
+appJson.expo.extra.backendUrl = '$BACKEND_URL';
+fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
+console.log('✅ Backend URL updated');
+"
+}
 
 # Function to check USB device connection
 check_usb_device() {
@@ -52,10 +76,94 @@ setup_usb_dev() {
     fi
 }
 
+# Function to build production APK (standalone with bundled JS)
+build_production_apk() {
+    local BACKEND_URL=$(get_backend_url "$1")
+    
+    echo ""
+    echo "🏭 PRODUCTION BUILD MODE"
+    echo "========================"
+    echo "📋 Configuration:"
+    echo "   Backend URL: $BACKEND_URL"
+    echo "   Build Type: Release APK (standalone, no Metro needed)"
+    echo "   Native Code: Included (all architectures)"
+    echo ""
+    
+    # Update backend URL
+    update_backend_url "$BACKEND_URL"
+    
+    echo "🔨 Building production release APK..."
+    echo "⚠️  This may take 5-10 minutes (compiling native code)..."
+    echo ""
+    
+    cd android
+    
+    # Build release APK with all architectures (no filters)
+    echo "🔧 Building universal APK with all native libraries..."
+    ./gradlew assembleRelease --no-daemon
+    
+    if [ $? -eq 0 ]; then
+        echo ""
+        echo "✅ Production build successful!"
+        echo ""
+        echo "📦 APK Location:"
+        echo "   android/app/build/outputs/apk/release/app-release.apk"
+        
+        if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            APK_SIZE=$(du -h app/build/outputs/apk/release/app-release.apk | cut -f1)
+            echo "   Size: $APK_SIZE"
+            echo ""
+            
+            # Offer to install
+            if adb devices | grep -q "device$"; then
+                echo "📱 Device detected! Install production APK? (y/n)"
+                read -p "Install: " INSTALL_CHOICE
+                
+                if [ "$INSTALL_CHOICE" = "y" ]; then
+                    echo "📲 Installing production APK..."
+                    cd ..
+                    adb install -r android/app/build/outputs/apk/release/app-release.apk
+                    
+                    if [ $? -eq 0 ]; then
+                        echo "✅ Production APK installed!"
+                        echo ""
+                        echo "🎉 App is ready to use (no Metro server needed)"
+                        echo "   Backend: $BACKEND_URL"
+                    else
+                        echo "❌ Installation failed"
+                    fi
+                    return 0
+                else
+                    cd ..
+                fi
+            else
+                echo "💡 To install, connect device and run:"
+                echo "   adb install -r android/app/build/outputs/apk/release/app-release.apk"
+                cd ..
+            fi
+        else
+            echo "⚠️  APK not found at expected location"
+            cd ..
+            return 1
+        fi
+    else
+        echo ""
+        echo "❌ Production build failed!"
+        echo "💡 Check error messages above"
+        cd ..
+        return 1
+    fi
+}
+
 # Function to build APK
+# Function to build development APK (for use with Metro)
 build_apk() {
     echo ""
-    echo "🔨 Building APK..."
+    echo "🔨 DEVELOPMENT BUILD MODE"
+    echo "========================="
+    echo "📋 Building debug APK (requires Metro server)..."
+    echo ""
+    
     echo "🧹 Cleaning cached bundles..."
     rm -f android/app/src/main/assets/index.android.bundle
     rm -rf android/app/build/intermediates/assets/
@@ -78,7 +186,8 @@ build_apk() {
         adb install -r app/build/outputs/apk/debug/app-debug.apk
         
         if [ $? -eq 0 ]; then
-            echo "🎉 APK installed successfully!"
+            echo "🎉 Development APK installed!"
+            echo "💡 Start Metro server to run the app"
             cd ..
             return 0
         else
@@ -173,36 +282,48 @@ show_device_info() {
 }
 
 # Main execution
-echo "🔌 Step 1: Checking USB device connection..."
-if ! check_usb_device; then
-    echo ""
-    echo "❌ Please connect your device via USB and try again"
-    exit 1
-fi
-
+echo "🎯 Choose build mode:"
 echo ""
-echo "🔧 Step 2: Setting up USB development..."
-setup_usb_dev
-
+echo "DEVELOPMENT MODE (requires Metro server):"
+echo "  1) 🚀 Start Metro server only (APK already installed)"
+echo "  2) 🔨 Build & install debug APK only"
+echo "  3) 🎪 Full dev setup (build debug APK + start Metro)"
+echo "  4) ⚡ Quick dev cycle (fast build + start Metro)"
 echo ""
-echo "🎯 Choose your development mode:"
-echo "1) 🚀 Start Metro server only (APK already installed)"
-echo "2) 🔨 Build & install APK only"
-echo "3) 🎪 Full setup (clean build APK + start Metro)"
-echo "4) ⚡ Quick cycle (fast build APK + start Metro)"
-echo "5) 📱 Show device info"
-echo "6) 🔄 Just setup USB and exit"
+echo "PRODUCTION MODE (standalone, no Metro needed):"
+echo "  5) 🏭 Build production APK with local backend"
+echo "  6) 🌐 Build production APK with ngrok backend"
+echo ""
+echo "UTILITIES:"
+echo "  7) 📱 Show device info"
+echo "  8) 🔄 Setup USB and exit"
+echo ""
 
-read -p "Choose (1-6): " CHOICE
+read -p "Choose (1-8): " CHOICE
 
 case $CHOICE in
     1)
+        if ! check_usb_device; then
+            echo "❌ Please connect device via USB"
+            exit 1
+        fi
+        setup_usb_dev
         metro_only
         ;;
     2)
+        if ! check_usb_device; then
+            echo "❌ Please connect device via USB"
+            exit 1
+        fi
+        setup_usb_dev
         build_apk
         ;;
     3)
+        if ! check_usb_device; then
+            echo "❌ Please connect device via USB"
+            exit 1
+        fi
+        setup_usb_dev
         if build_apk; then
             echo ""
             echo "✅ APK ready! Starting Metro server..."
@@ -211,12 +332,46 @@ case $CHOICE in
         fi
         ;;
     4)
+        if ! check_usb_device; then
+            echo "❌ Please connect device via USB"
+            exit 1
+        fi
+        setup_usb_dev
         quick_dev_cycle
         ;;
     5)
-        show_device_info
+        echo ""
+        read -p "Enter local backend URL (or press Enter for default http://192.168.100.55:3000): " BACKEND_URL
+        if [ -z "$BACKEND_URL" ]; then
+            BACKEND_URL="http://192.168.100.55:3000"
+        fi
+        build_production_apk "$BACKEND_URL"
         ;;
     6)
+        echo ""
+        echo "💡 Make sure ngrok is running! Check your ngrok terminal for the URL."
+        echo "   Example: https://abc123.ngrok-free.dev"
+        echo ""
+        read -p "Enter ngrok URL: " NGROK_URL
+        if [ -z "$NGROK_URL" ]; then
+            echo "❌ No URL provided"
+            exit 1
+        fi
+        build_production_apk "$NGROK_URL"
+        ;;
+    7)
+        if ! check_usb_device; then
+            echo "❌ Please connect device via USB"
+            exit 1
+        fi
+        show_device_info
+        ;;
+    8)
+        if ! check_usb_device; then
+            echo "❌ Please connect device via USB"
+            exit 1
+        fi
+        setup_usb_dev
         echo "✅ USB development setup complete!"
         echo "📱 Device ready for development"
         adb devices

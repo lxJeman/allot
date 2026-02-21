@@ -111,6 +111,22 @@ class AllotAccessibilityService : AccessibilityService() {
             // Detect app changes
             if (it.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 val packageName = it.packageName?.toString()
+                
+                // IGNORE system overlays and dialogs that appear on top of monitored apps
+                val isSystemOverlay = packageName != null && (
+                    packageName.startsWith("com.android.systemui") ||
+                    packageName == "com.miui.securitycenter" ||
+                    packageName == "com.android.permissioncontroller" ||
+                    packageName.startsWith("com.google.android.permissioncontroller") ||
+                    packageName == "com.allot" // Ignore our own app's popups/overlays
+                )
+                
+                // If it's a system overlay and we're currently in a monitored app, ignore the change
+                if (isSystemOverlay && isMonitoredApp) {
+                    Log.d(TAG, "🛡️ Ignoring system overlay: $packageName (staying in monitored app)")
+                    return
+                }
+                
                 if (packageName != null && packageName != currentApp) {
                     val previousApp = currentApp
                     val previousAppName = getAppDisplayName(previousApp)

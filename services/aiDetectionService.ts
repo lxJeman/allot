@@ -14,6 +14,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sha256 } from 'react-native-sha256';
+import { nativeHttpClient } from './nativeHttpBridge';
 
 // ============================================================================
 // TYPES
@@ -54,6 +55,8 @@ interface CachedResult {
 // CONFIGURATION
 // ============================================================================
 
+import { Config } from '../constants/config';
+
 const DEFAULT_CONFIG: DetectionConfig = {
   blockList: ['political', 'toxic', 'clickbait'],
   minConfidence: 0.80,
@@ -61,8 +64,8 @@ const DEFAULT_CONFIG: DetectionConfig = {
   cacheExpiryHours: 24,
 };
 
-// Removed Google Vision API key - no longer needed
-const BACKEND_URL = 'http://192.168.100.55:3000';
+// Backend URL now comes from centralized config (supports ngrok URLs)
+const BACKEND_URL = Config.BACKEND_URL;
 
 // ============================================================================
 // AI DETECTION SERVICE
@@ -240,10 +243,7 @@ class AIDetectionService {
     try {
       const classificationStartTime = Date.now();
       
-      // Import native HTTP client
-      const { nativeHttpClient } = await import('./nativeHttpBridge');
-      
-      // Use native HTTP client instead of broken React Native fetch
+      // Use native HTTP client (now imported statically - no more bundling delay!)
       const response = await nativeHttpClient.post(`${BACKEND_URL}/analyze`, {
         headers: {
           'Content-Type': 'application/json',

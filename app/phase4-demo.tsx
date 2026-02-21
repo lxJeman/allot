@@ -148,11 +148,12 @@ export default function Phase4DemoScreen() {
       const startTime = Date.now();
       console.log('🚀 Sending to backend for analysis using NATIVE HTTP CLIENT...');
       
-      // Import native HTTP client
+      // Import native HTTP client and config
       const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+      const { Config } = await import('../constants/config');
       
       // Send to backend using native HTTP client
-      const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+      const response = await nativeHttpClient.post(`${Config.BACKEND_URL}/analyze`, {
         body: {
           image: data.base64,
           width: data.width,

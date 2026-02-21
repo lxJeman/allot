@@ -1,0 +1,648 @@
+ LOG  📝 [2026-02-17T20:14:21.996Z] ML Kit extraction complete (368ms) (ID: proc_1771359261995_z5qj5): "10:14
+Q Find related content
+BREAKING: IRAN DRAWS
+Daily News Reporting USA208
+BREAKING: IRAN DRAWS T..."
+ LOG  🧠 [2026-02-17T20:14:21.996Z] Sending extracted text to backend for classification... (ID: proc_1771359261995_z5qj5)
+ LOG  🧠 [2026-02-17T20:14:21.996Z] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🧠 [2026-02-17T20:14:21.996Z] If you see this for non-monitored apps, there's a critical bug!
+ LOG  🌐 [2026-02-17T20:14:21.996Z] About to call aiDetectionService.detectHarmfulContent
+ LOG  📝 [2026-02-17T20:14:21.996Z] Text length: 258 chars
+ LOG  🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: req_1771359262370_sxm23a6cn)
+ LOG  📝 [AI Detection] Text length: 258 chars
+ LOG  🔄 [AI Detection] Text normalized: 258 -> 242 chars
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  ❌ [AI Detection] Cache miss (19/19)
+ LOG  🌐 [AI Detection] Making backend request using NATIVE HTTP CLIENT (ID: req_1771359262370_sxm23a6cn)
+ LOG  🚀 [NativeHttp] POST http://192.168.100.55:3000/analyze (timeout: 2000ms)
+ LOG  📦 [NativeHttp] Body: 417 chars
+ LOG  📜 [2026-02-17T20:14:22.499Z] SCROLL DETECTED: {"currentApp": "TikTok", "event": "scroll_detected", "isMonitoredApp": true, "scrollCount": 55, "timestamp": 1771359262493}
+ LOG  📜 [2026-02-17T20:14:22.499Z] App: TikTok, Count: 55
+ LOG  🚫 [2026-02-17T20:14:22.499Z] IGNORING SCROLL - Currently processing (ID in progress)
+ LOG  🚫 [2026-02-17T20:14:22.499Z] → Will reset after current processing completes
+ LOG  ✅ [NativeHttp] Response in 996ms: HTTP 200
+ LOG  ✅ [AI Detection] Native HTTP response received in 998ms (ID: req_1771359262370_sxm23a6cn)
+ LOG  🧠 [AI Detection] Classification: safe_content (50%) - continue
+ LOG  ✅ [AI Detection] Pipeline complete: 1103ms (Classification: 1000ms)
+ LOG  🎉 [2026-02-17T20:14:21.996Z] Backend request completed successfully! (ID: proc_1771359261995_z5qj5)
+ LOG  🎉 [2026-02-17T20:14:21.996Z] Result received: safe_content (0.5)
+ LOG  📊 [2026-02-17T20:14:21.996Z] Complete analysis (1478ms) (ID: proc_1771359261995_z5qj5):
+ LOG     🏷️ Category: safe_content
+ LOG     📊 Confidence: 50.0%
+ LOG     🚨 Harmful: NO
+ LOG     🎯 Action: continue
+ LOG     ⏱️ ML Kit: 368ms | Backend: 1104ms | Total: 1478ms
+ LOG     🚀 Advantage: 2.2x faster than Google Vision API
+ LOG  ✅ [2026-02-17T20:14:21.996Z] Content safe - continuing (ID: proc_1771359261995_z5qj5)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 [2026-02-17T20:14:23.578Z] Processing complete - immediately triggering next capture (ID: proc_1771359261995_z5qj5)
+ LOG  🔄 [2026-02-17T20:14:23.578Z] → captureLoopRef.current: true
+ LOG  🔄 [2026-02-17T20:14:23.578Z] → This should continue the monitoring loop
+ LOG  🎯 [2026-02-17T20:14:23.578Z] → Triggering next capture NOW (ID: proc_1771359261995_z5qj5)
+ LOG  🎯 [2026-02-17T20:14:23.580Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:23.580Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:23.580Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:23.776Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:23.776Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:23.580Z] captureNextFrame completed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:23.776Z] App at capture time: TikTok (monitored: true)
+ LOG  🔄 [2026-02-17T20:14:23.776Z] Starting automatic processing for monitored app: TikTok
+ LOG  ✅ [2026-02-17T20:14:23.776Z] CALLING processCapture - this should be the ONLY path to backend
+ LOG  🔍 [2026-02-17T20:14:23.776Z] Processing state BEFORE: false
+ LOG  🚪 [2026-02-17T20:14:23.904Z] processCapture ENTRY (ID: proc_1771359263904_gnmod) - smartCaptureEnabled: true
+ LOG  📍 [2026-02-17T20:14:23.904Z] processCapture called from: at next (native)
+ LOG  ✅ [2026-02-17T20:14:23.904Z] Using provided app info: TikTok (monitored: true) (ID: proc_1771359263904_gnmod)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🤖 [2026-02-17T20:14:23.905Z] Starting Local ML Kit text extraction... (ID: proc_1771359263904_gnmod)
+ LOG  🤖 [2026-02-17T20:14:23.905Z] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🤖 [2026-02-17T20:14:23.905Z] If you see this for non-monitored apps, there's a bug!
+ LOG  📝 [2026-02-17T20:14:23.905Z] ML Kit extraction complete (397ms) (ID: proc_1771359263904_gnmod): "10:14
+Q Find related content
+BREAKING: IRAN DRAWS
+Daily News Reporting USA02-08
+BREAKING:HRAN DRAWS ..."
+ LOG  🧠 [2026-02-17T20:14:23.905Z] Sending extracted text to backend for classification... (ID: proc_1771359263904_gnmod)
+ LOG  🧠 [2026-02-17T20:14:23.905Z] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🧠 [2026-02-17T20:14:23.905Z] If you see this for non-monitored apps, there's a critical bug!
+ LOG  🌐 [2026-02-17T20:14:23.905Z] About to call aiDetectionService.detectHarmfulContent
+ LOG  📝 [2026-02-17T20:14:23.905Z] Text length: 257 chars
+ LOG  🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: req_1771359264399_6a8nu98ly)
+ LOG  📝 [AI Detection] Text length: 257 chars
+ LOG  🔄 [AI Detection] Text normalized: 257 -> 241 chars
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  ❌ [AI Detection] Cache miss (20/20)
+ LOG  🌐 [AI Detection] Making backend request using NATIVE HTTP CLIENT (ID: req_1771359264399_6a8nu98ly)
+ LOG  🚀 [NativeHttp] POST http://192.168.100.55:3000/analyze (timeout: 2000ms)
+ LOG  📦 [NativeHttp] Body: 416 chars
+ LOG  📜 [2026-02-17T20:14:24.604Z] SCROLL DETECTED: {"currentApp": "TikTok", "event": "scroll_detected", "isMonitoredApp": true, "scrollCount": 56, "timestamp": 1771359264600}
+ LOG  📜 [2026-02-17T20:14:24.604Z] App: TikTok, Count: 56
+ LOG  🚫 [2026-02-17T20:14:24.604Z] IGNORING SCROLL - Currently processing (ID in progress)
+ LOG  🚫 [2026-02-17T20:14:24.604Z] → Will reset after current processing completes
+ LOG  ✅ [NativeHttp] Response in 766ms: HTTP 200
+ LOG  ✅ [AI Detection] Native HTTP response received in 769ms (ID: req_1771359264399_6a8nu98ly)
+ LOG  🧠 [AI Detection] Classification: safe_content (50%) - continue
+ LOG  ✅ [AI Detection] Pipeline complete: 873ms (Classification: 770ms)
+ LOG  🎉 [2026-02-17T20:14:23.905Z] Backend request completed successfully! (ID: proc_1771359263904_gnmod)
+ LOG  🎉 [2026-02-17T20:14:23.905Z] Result received: safe_content (0.5)
+ LOG  📊 [2026-02-17T20:14:23.905Z] Complete analysis (1369ms) (ID: proc_1771359263904_gnmod):
+ LOG     🏷️ Category: safe_content
+ LOG     📊 Confidence: 50.0%
+ LOG     🚨 Harmful: NO
+ LOG     🎯 Action: continue
+ LOG     ⏱️ ML Kit: 397ms | Backend: 875ms | Total: 1369ms
+ LOG     🚀 Advantage: 2x faster than Google Vision API
+ LOG  ✅ [2026-02-17T20:14:23.905Z] Content safe - continuing (ID: proc_1771359263904_gnmod)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 [2026-02-17T20:14:25.382Z] Processing complete - immediately triggering next capture (ID: proc_1771359263904_gnmod)
+ LOG  🔄 [2026-02-17T20:14:25.382Z] → captureLoopRef.current: true
+ LOG  🔄 [2026-02-17T20:14:25.382Z] → This should continue the monitoring loop
+ LOG  🎯 [2026-02-17T20:14:25.382Z] → Triggering next capture NOW (ID: proc_1771359263904_gnmod)
+ LOG  🎯 [2026-02-17T20:14:25.384Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:25.384Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:25.384Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:25.564Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:25.564Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:25.384Z] captureNextFrame completed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:25.564Z] App at capture time: TikTok (monitored: true)
+ LOG  🔄 [2026-02-17T20:14:25.564Z] Starting automatic processing for monitored app: TikTok
+ LOG  ✅ [2026-02-17T20:14:25.564Z] CALLING processCapture - this should be the ONLY path to backend
+ LOG  🔍 [2026-02-17T20:14:25.564Z] Processing state BEFORE: false
+ LOG  🚪 [2026-02-17T20:14:25.673Z] processCapture ENTRY (ID: proc_1771359265673_tsr6a) - smartCaptureEnabled: true
+ LOG  📍 [2026-02-17T20:14:25.673Z] processCapture called from: at next (native)
+ LOG  ✅ [2026-02-17T20:14:25.673Z] Using provided app info: TikTok (monitored: true) (ID: proc_1771359265673_tsr6a)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🤖 [2026-02-17T20:14:25.674Z] Starting Local ML Kit text extraction... (ID: proc_1771359265673_tsr6a)
+ LOG  🤖 [2026-02-17T20:14:25.674Z] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🤖 [2026-02-17T20:14:25.674Z] If you see this for non-monitored apps, there's a bug!
+ LOG  📝 [2026-02-17T20:14:25.674Z] ML Kit extraction complete (396ms) (ID: proc_1771359265673_tsr6a): "10:14
+Q Find related content
+Daily News Reporting USA · 02-08
+BREAKING: IRAN DRAWS THE LINE -
+NO SUR..."
+ LOG  🧠 [2026-02-17T20:14:25.674Z] Sending extracted text to backend for classification... (ID: proc_1771359265673_tsr6a)
+ LOG  🧠 [2026-02-17T20:14:25.674Z] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🧠 [2026-02-17T20:14:25.674Z] If you see this for non-monitored apps, there's a critical bug!
+ LOG  🌐 [2026-02-17T20:14:25.674Z] About to call aiDetectionService.detectHarmfulContent
+ LOG  📝 [2026-02-17T20:14:25.674Z] Text length: 266 chars
+ LOG  🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: req_1771359266170_gbgjow1o8)
+ LOG  📝 [AI Detection] Text length: 266 chars
+ LOG  🔄 [AI Detection] Text normalized: 266 -> 245 chars
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  ❌ [AI Detection] Cache miss (21/21)
+ LOG  🌐 [AI Detection] Making backend request using NATIVE HTTP CLIENT (ID: req_1771359266170_gbgjow1o8)
+ LOG  🚀 [NativeHttp] POST http://192.168.100.55:3000/analyze (timeout: 2000ms)
+ LOG  📦 [NativeHttp] Body: 425 chars
+ LOG  📜 [2026-02-17T20:14:26.703Z] SCROLL DETECTED: {"currentApp": "TikTok", "event": "scroll_detected", "isMonitoredApp": true, "scrollCount": 57, "timestamp": 1771359266698}
+ LOG  📜 [2026-02-17T20:14:26.703Z] App: TikTok, Count: 57
+ LOG  🚫 [2026-02-17T20:14:26.703Z] IGNORING SCROLL - Currently processing (ID in progress)
+ LOG  🚫 [2026-02-17T20:14:26.703Z] → Will reset after current processing completes
+ LOG  ✅ [NativeHttp] Response in 741ms: HTTP 200
+ LOG  ✅ [AI Detection] Native HTTP response received in 743ms (ID: req_1771359266170_gbgjow1o8)
+ LOG  🧠 [AI Detection] Classification: safe_content (98%) - continue
+ LOG  ✅ [AI Detection] Pipeline complete: 875ms (Classification: 743ms)
+ LOG  🎉 [2026-02-17T20:14:25.674Z] Backend request completed successfully! (ID: proc_1771359265673_tsr6a)
+ LOG  🎉 [2026-02-17T20:14:25.674Z] Result received: safe_content (0.98)
+ LOG  📊 [2026-02-17T20:14:25.674Z] Complete analysis (1377ms) (ID: proc_1771359265673_tsr6a):
+ LOG     🏷️ Category: safe_content
+ LOG     📊 Confidence: 98.0%
+ LOG     🚨 Harmful: NO
+ LOG     🎯 Action: continue
+ LOG     ⏱️ ML Kit: 396ms | Backend: 881ms | Total: 1377ms
+ LOG     🚀 Advantage: 2x faster than Google Vision API
+ LOG  ✅ [2026-02-17T20:14:25.674Z] Content safe - continuing (ID: proc_1771359265673_tsr6a)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 [2026-02-17T20:14:27.158Z] Processing complete - immediately triggering next capture (ID: proc_1771359265673_tsr6a)
+ LOG  🔄 [2026-02-17T20:14:27.158Z] → captureLoopRef.current: true
+ LOG  🔄 [2026-02-17T20:14:27.158Z] → This should continue the monitoring loop
+ LOG  🎯 [2026-02-17T20:14:27.158Z] → Triggering next capture NOW (ID: proc_1771359265673_tsr6a)
+ LOG  🎯 [2026-02-17T20:14:27.160Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:27.160Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:27.160Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:27.332Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:27.332Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:27.160Z] captureNextFrame completed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:27.332Z] App at capture time: TikTok (monitored: true)
+ LOG  🔄 [2026-02-17T20:14:27.332Z] Starting automatic processing for monitored app: TikTok
+ LOG  ✅ [2026-02-17T20:14:27.332Z] CALLING processCapture - this should be the ONLY path to backend
+ LOG  🔍 [2026-02-17T20:14:27.332Z] Processing state BEFORE: false
+ LOG  🚪 [2026-02-17T20:14:27.438Z] processCapture ENTRY (ID: proc_1771359267438_8s2jb) - smartCaptureEnabled: true
+ LOG  📍 [2026-02-17T20:14:27.438Z] processCapture called from: at next (native)
+ LOG  ✅ [2026-02-17T20:14:27.438Z] Using provided app info: TikTok (monitored: true) (ID: proc_1771359267438_8s2jb)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🤖 [2026-02-17T20:14:27.439Z] Starting Local ML Kit text extraction... (ID: proc_1771359267438_8s2jb)
+ LOG  🤖 [2026-02-17T20:14:27.439Z] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🤖 [2026-02-17T20:14:27.439Z] If you see this for non-monitored apps, there's a bug!
+ LOG  📝 [2026-02-17T20:14:27.439Z] ML Kit extraction complete (382ms) (ID: proc_1771359267438_8s2jb): "10:14
+Q Find related content
+BREAKING: IRAN DRAWS
+Daily News Reporting USA · 02-08
+BREAKING: IRAN DR..."
+ LOG  🧠 [2026-02-17T20:14:27.439Z] Sending extracted text to backend for classification... (ID: proc_1771359267438_8s2jb)
+ LOG  🧠 [2026-02-17T20:14:27.439Z] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🧠 [2026-02-17T20:14:27.439Z] If you see this for non-monitored apps, there's a critical bug!
+ LOG  🌐 [2026-02-17T20:14:27.439Z] About to call aiDetectionService.detectHarmfulContent
+ LOG  📝 [2026-02-17T20:14:27.439Z] Text length: 266 chars
+ LOG  🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: req_1771359267923_yhfx36dj1)
+ LOG  📝 [AI Detection] Text length: 266 chars
+ LOG  🔄 [AI Detection] Text normalized: 266 -> 244 chars
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  ❌ [AI Detection] Cache miss (22/22)
+ LOG  🌐 [AI Detection] Making backend request using NATIVE HTTP CLIENT (ID: req_1771359267923_yhfx36dj1)
+ LOG  🚀 [NativeHttp] POST http://192.168.100.55:3000/analyze (timeout: 2000ms)
+ LOG  📦 [NativeHttp] Body: 426 chars
+ LOG  📜 [2026-02-17T20:14:28.808Z] SCROLL DETECTED: {"currentApp": "TikTok", "event": "scroll_detected", "isMonitoredApp": true, "scrollCount": 58, "timestamp": 1771359268805}
+ LOG  📜 [2026-02-17T20:14:28.808Z] App: TikTok, Count: 58
+ LOG  🚫 [2026-02-17T20:14:28.808Z] IGNORING SCROLL - Currently processing (ID in progress)
+ LOG  🚫 [2026-02-17T20:14:28.808Z] → Will reset after current processing completes
+ LOG  ✅ [NativeHttp] Response in 870ms: HTTP 200
+ LOG  ✅ [AI Detection] Native HTTP response received in 873ms (ID: req_1771359267923_yhfx36dj1)
+ LOG  🧠 [AI Detection] Classification: safe_content (50%) - continue
+ LOG  ✅ [AI Detection] Pipeline complete: 979ms (Classification: 876ms)
+ LOG  🎉 [2026-02-17T20:14:27.439Z] Backend request completed successfully! (ID: proc_1771359267438_8s2jb)
+ LOG  🎉 [2026-02-17T20:14:27.439Z] Result received: safe_content (0.5)
+ LOG  📊 [2026-02-17T20:14:27.439Z] Complete analysis (1466ms) (ID: proc_1771359267438_8s2jb):
+ LOG     🏷️ Category: safe_content
+ LOG     📊 Confidence: 50.0%
+ LOG     🚨 Harmful: NO
+ LOG     🎯 Action: continue
+ LOG     ⏱️ ML Kit: 382ms | Backend: 982ms | Total: 1466ms
+ LOG     🚀 Advantage: 2.1x faster than Google Vision API
+ LOG  ✅ [2026-02-17T20:14:27.439Z] Content safe - continuing (ID: proc_1771359267438_8s2jb)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 [2026-02-17T20:14:29.234Z] Processing complete - immediately triggering next capture (ID: proc_1771359267438_8s2jb)
+ LOG  🔄 [2026-02-17T20:14:29.234Z] → captureLoopRef.current: true
+ LOG  🔄 [2026-02-17T20:14:29.234Z] → This should continue the monitoring loop
+ LOG  🎯 [2026-02-17T20:14:29.234Z] → Triggering next capture NOW (ID: proc_1771359267438_8s2jb)
+ LOG  🎯 [2026-02-17T20:14:29.238Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:29.238Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:29.238Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:29.466Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:29.466Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:29.238Z] captureNextFrame completed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:29.466Z] App at capture time: TikTok (monitored: true)
+ LOG  🔄 [2026-02-17T20:14:29.466Z] Starting automatic processing for monitored app: TikTok
+ LOG  ✅ [2026-02-17T20:14:29.466Z] CALLING processCapture - this should be the ONLY path to backend
+ LOG  🔍 [2026-02-17T20:14:29.466Z] Processing state BEFORE: false
+ LOG  🚪 [2026-02-17T20:14:29.613Z] processCapture ENTRY (ID: proc_1771359269613_31h31) - smartCaptureEnabled: true
+ LOG  📍 [2026-02-17T20:14:29.613Z] processCapture called from: at next (native)
+ LOG  ✅ [2026-02-17T20:14:29.613Z] Using provided app info: TikTok (monitored: true) (ID: proc_1771359269613_31h31)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🤖 [2026-02-17T20:14:29.615Z] Starting Local ML Kit text extraction... (ID: proc_1771359269613_31h31)
+ LOG  🤖 [2026-02-17T20:14:29.615Z] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🤖 [2026-02-17T20:14:29.615Z] If you see this for non-monitored apps, there's a bug!
+ LOG  📝 [2026-02-17T20:14:29.615Z] ML Kit extraction complete (509ms) (ID: proc_1771359269613_31h31): "10:14
+Q Find related content
+Daily News Reporting USA 02-08
+BREAKING: IRAN DRAWS
+THE LINE-NO SURREND..."
+ LOG  🧠 [2026-02-17T20:14:29.615Z] Sending extracted text to backend for classification... (ID: proc_1771359269613_31h31)
+ LOG  🧠 [2026-02-17T20:14:29.615Z] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🧠 [2026-02-17T20:14:29.615Z] If you see this for non-monitored apps, there's a critical bug!
+ LOG  🌐 [2026-02-17T20:14:29.615Z] About to call aiDetectionService.detectHarmfulContent
+ LOG  📝 [2026-02-17T20:14:29.615Z] Text length: 264 chars
+ LOG  🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: req_1771359270227_ho7jivuxm)
+ LOG  📝 [AI Detection] Text length: 264 chars
+ LOG  🔄 [AI Detection] Text normalized: 264 -> 244 chars
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  ❌ [AI Detection] Cache miss (23/23)
+ LOG  🌐 [AI Detection] Making backend request using NATIVE HTTP CLIENT (ID: req_1771359270227_ho7jivuxm)
+ LOG  🚀 [NativeHttp] POST http://192.168.100.55:3000/analyze (timeout: 2000ms)
+ LOG  📦 [NativeHttp] Body: 423 chars
+ LOG  📜 [2026-02-17T20:14:30.912Z] SCROLL DETECTED: {"currentApp": "TikTok", "event": "scroll_detected", "isMonitoredApp": true, "scrollCount": 59, "timestamp": 1771359270909}
+ LOG  📜 [2026-02-17T20:14:30.912Z] App: TikTok, Count: 59
+ LOG  🚫 [2026-02-17T20:14:30.912Z] IGNORING SCROLL - Currently processing (ID in progress)
+ LOG  🚫 [2026-02-17T20:14:30.912Z] → Will reset after current processing completes
+ LOG  ✅ [NativeHttp] Response in 741ms: HTTP 200
+ LOG  ✅ [AI Detection] Native HTTP response received in 742ms (ID: req_1771359270227_ho7jivuxm)
+ LOG  🧠 [AI Detection] Classification: safe_content (92%) - continue
+ LOG  ✅ [AI Detection] Pipeline complete: 846ms (Classification: 743ms)
+ LOG  🎉 [2026-02-17T20:14:29.615Z] Backend request completed successfully! (ID: proc_1771359269613_31h31)
+ LOG  🎉 [2026-02-17T20:14:29.615Z] Result received: safe_content (0.92)
+ LOG  📊 [2026-02-17T20:14:29.615Z] Complete analysis (1459ms) (ID: proc_1771359269613_31h31):
+ LOG     🏷️ Category: safe_content
+ LOG     📊 Confidence: 92.0%
+ LOG     🚨 Harmful: NO
+ LOG     🎯 Action: continue
+ LOG     ⏱️ ML Kit: 509ms | Backend: 847ms | Total: 1459ms
+ LOG     🚀 Advantage: 1.6x faster than Google Vision API
+ LOG  ✅ [2026-02-17T20:14:29.615Z] Content safe - continuing (ID: proc_1771359269613_31h31)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 [2026-02-17T20:14:31.188Z] Processing complete - immediately triggering next capture (ID: proc_1771359269613_31h31)
+ LOG  🔄 [2026-02-17T20:14:31.188Z] → captureLoopRef.current: true
+ LOG  🔄 [2026-02-17T20:14:31.188Z] → This should continue the monitoring loop
+ LOG  🎯 [2026-02-17T20:14:31.188Z] → Triggering next capture NOW (ID: proc_1771359269613_31h31)
+ LOG  🎯 [2026-02-17T20:14:31.189Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:31.189Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:31.189Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:31.365Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:31.365Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:31.189Z] captureNextFrame completed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:31.365Z] App at capture time: TikTok (monitored: true)
+ LOG  🔄 [2026-02-17T20:14:31.365Z] Starting automatic processing for monitored app: TikTok
+ LOG  ✅ [2026-02-17T20:14:31.365Z] CALLING processCapture - this should be the ONLY path to backend
+ LOG  🔍 [2026-02-17T20:14:31.365Z] Processing state BEFORE: false
+ LOG  🚪 [2026-02-17T20:14:31.469Z] processCapture ENTRY (ID: proc_1771359271469_8xnjj) - smartCaptureEnabled: true
+ LOG  📍 [2026-02-17T20:14:31.469Z] processCapture called from: at next (native)
+ LOG  ✅ [2026-02-17T20:14:31.469Z] Using provided app info: TikTok (monitored: true) (ID: proc_1771359271469_8xnjj)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🤖 [2026-02-17T20:14:31.470Z] Starting Local ML Kit text extraction... (ID: proc_1771359271469_8xnjj)
+ LOG  🤖 [2026-02-17T20:14:31.470Z] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🤖 [2026-02-17T20:14:31.470Z] If you see this for non-monitored apps, there's a bug!
+ LOG  📝 [2026-02-17T20:14:31.470Z] ML Kit extraction complete (353ms) (ID: proc_1771359271469_8xnjj): "10:14
+Q Find related content
+Daily News Reporting USA - 02-08
+BREAKING: IRAN DRAWS
+THE LINE-NO SURRE..."
+ LOG  🧠 [2026-02-17T20:14:31.470Z] Sending extracted text to backend for classification... (ID: proc_1771359271469_8xnjj)
+ LOG  🧠 [2026-02-17T20:14:31.470Z] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🧠 [2026-02-17T20:14:31.470Z] If you see this for non-monitored apps, there's a critical bug!
+ LOG  🌐 [2026-02-17T20:14:31.470Z] About to call aiDetectionService.detectHarmfulContent
+ LOG  📝 [2026-02-17T20:14:31.470Z] Text length: 265 chars
+ LOG  🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: req_1771359271922_58mxiamj7)
+ LOG  📝 [AI Detection] Text length: 265 chars
+ LOG  🔄 [AI Detection] Text normalized: 265 -> 245 chars
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  ❌ [AI Detection] Cache miss (24/24)
+ LOG  🌐 [AI Detection] Making backend request using NATIVE HTTP CLIENT (ID: req_1771359271922_58mxiamj7)
+ LOG  🚀 [NativeHttp] POST http://192.168.100.55:3000/analyze (timeout: 2000ms)
+ LOG  📦 [NativeHttp] Body: 424 chars
+ LOG  ✅ [NativeHttp] Response in 710ms: HTTP 200
+ LOG  ✅ [AI Detection] Native HTTP response received in 712ms (ID: req_1771359271922_58mxiamj7)
+ LOG  🧠 [AI Detection] Classification: safe_content (97%) - continue
+ LOG  ✅ [AI Detection] Pipeline complete: 852ms (Classification: 714ms)
+ LOG  🎉 [2026-02-17T20:14:31.470Z] Backend request completed successfully! (ID: proc_1771359271469_8xnjj)
+ LOG  🎉 [2026-02-17T20:14:31.470Z] Result received: safe_content (0.97)
+ LOG  📊 [2026-02-17T20:14:31.470Z] Complete analysis (1305ms) (ID: proc_1771359271469_8xnjj):
+ LOG     🏷️ Category: safe_content
+ LOG     📊 Confidence: 97.0%
+ LOG     🚨 Harmful: NO
+ LOG     🎯 Action: continue
+ LOG     ⏱️ ML Kit: 353ms | Backend: 853ms | Total: 1305ms
+ LOG     🚀 Advantage: 2.3x faster than Google Vision API
+ LOG  ✅ [2026-02-17T20:14:31.470Z] Content safe - continuing (ID: proc_1771359271469_8xnjj)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 [2026-02-17T20:14:33.019Z] Processing complete - immediately triggering next capture (ID: proc_1771359271469_8xnjj)
+ LOG  🔄 [2026-02-17T20:14:33.019Z] → captureLoopRef.current: true
+ LOG  🔄 [2026-02-17T20:14:33.019Z] → This should continue the monitoring loop
+ LOG  🎯 [2026-02-17T20:14:33.019Z] → Triggering next capture NOW (ID: proc_1771359271469_8xnjj)
+ LOG  🎯 [2026-02-17T20:14:33.023Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:33.023Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:33.023Z] → isProcessingRef.current: false
+ LOG  📜 [2026-02-17T20:14:33.026Z] SCROLL DETECTED: {"currentApp": "TikTok", "event": "scroll_detected", "isMonitoredApp": true, "scrollCount": 60, "timestamp": 1771359273007}
+ LOG  📜 [2026-02-17T20:14:33.026Z] App: TikTok, Count: 60
+ LOG  📜 [2026-02-17T20:14:33.026Z] → RESETTING CAPTURE PIPELINE
+ LOG  🔄 [2026-02-17T20:14:33.029Z] RESETTING CAPTURE STATE
+ LOG  🔄 [2026-02-17T20:14:33.029Z] → Clearing processing flags
+ LOG  🔄 [2026-02-17T20:14:33.029Z] → Stopping any pending analysis
+ LOG  🔄 [2026-02-17T20:14:33.029Z] → Cancelling backend requests
+ LOG  🚫 [AI Detection] Cancelling 0 active requests due to scroll
+ LOG  ✅ [AI Detection] All requests marked as cancelled (0 total)
+ LOG  📊 [AI Detection] Cancelled requests will be ignored when they complete
+ LOG  🚫 [2026-02-17T20:14:33.029Z] → Backend requests cancelled successfully
+ LOG  🔄 [2026-02-17T20:14:33.029Z] → Checking if we should restart capture loop
+ LOG  ✅ [2026-02-17T20:14:33.029Z] CAPTURE STATE RESET COMPLETE
+ LOG  🔄 [2026-02-17T20:14:33.029Z] → Restarting capture loop - still in monitored app: TikTok
+ LOG  🎯 [2026-02-17T20:14:33.029Z] → IMMEDIATELY triggering fresh capture after scroll reset
+ LOG  🎯 [2026-02-17T20:14:33.048Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:33.048Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:33.048Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ ERROR  ❌ [2026-02-17T20:14:33.023Z] Error triggering next capture: [Error: New capture request superseded this one] Error: New capture request superseded this one
+ LOG  📸 [2026-02-17T20:14:33.291Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:33.291Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:33.048Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:33.291Z] App at capture time: TikTok (monitored: true)
+ LOG  🔄 [2026-02-17T20:14:33.291Z] Starting automatic processing for monitored app: TikTok
+ LOG  ✅ [2026-02-17T20:14:33.291Z] CALLING processCapture - this should be the ONLY path to backend
+ LOG  🔍 [2026-02-17T20:14:33.291Z] Processing state BEFORE: false
+ LOG  🚪 [2026-02-17T20:14:33.298Z] processCapture ENTRY (ID: proc_1771359273298_hjjjs) - smartCaptureEnabled: true
+ LOG  📍 [2026-02-17T20:14:33.298Z] processCapture called from: at next (native)
+ LOG  ✅ [2026-02-17T20:14:33.298Z] Using provided app info: TikTok (monitored: true) (ID: proc_1771359273298_hjjjs)
+ LOG  🤖 [2026-02-17T20:14:33.309Z] Starting Local ML Kit text extraction... (ID: proc_1771359273298_hjjjs)
+ LOG  🤖 [2026-02-17T20:14:33.309Z] THIS SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🤖 [2026-02-17T20:14:33.309Z] If you see this for non-monitored apps, there's a bug!
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:33.788Z] App changed: {"appName": "com.miui.home", "isMonitored": false, "packageName": "com.miui.home", "timestamp": 1771359273699}
+ LOG  📱 [2026-02-17T20:14:33.788Z] Left monitored app, now in: com.miui.home
+ LOG     → Screen capture should be PAUSED
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📝 [2026-02-17T20:14:33.309Z] ML Kit extraction complete (699ms) (ID: proc_1771359273298_hjjjs): "10:14
+Q Find related content
+BREAKING: IRAN DRAWS
+THE LINE-NO SURRENDER
+ON URANIUM!
+Daily News Repor..."
+ LOG  🧠 [2026-02-17T20:14:33.309Z] Sending extracted text to backend for classification... (ID: proc_1771359273298_hjjjs)
+ LOG  🧠 [2026-02-17T20:14:33.309Z] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS
+ LOG  🧠 [2026-02-17T20:14:33.309Z] If you see this for non-monitored apps, there's a critical bug!
+ LOG  🌐 [2026-02-17T20:14:33.309Z] About to call aiDetectionService.detectHarmfulContent
+ LOG  📝 [2026-02-17T20:14:33.309Z] Text length: 256 chars
+ LOG  🎯 [AI Detection] Starting pipeline with pre-extracted text... (ID: req_1771359274033_9vr9lwlve)
+ LOG  📝 [AI Detection] Text length: 256 chars
+ LOG  🔄 [AI Detection] Text normalized: 256 -> 240 chars
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  ❌ [AI Detection] Cache miss (25/25)
+ LOG  🌐 [AI Detection] Making backend request using NATIVE HTTP CLIENT (ID: req_1771359274033_9vr9lwlve)
+ LOG  🚀 [NativeHttp] POST http://192.168.100.55:3000/analyze (timeout: 2000ms)
+ LOG  📦 [NativeHttp] Body: 413 chars
+ LOG  ✅ [NativeHttp] Response in 618ms: HTTP 200
+ LOG  ✅ [AI Detection] Native HTTP response received in 621ms (ID: req_1771359274033_9vr9lwlve)
+ LOG  🧠 [AI Detection] Classification: safe_content (98%) - continue
+ LOG  ✅ [AI Detection] Pipeline complete: 790ms (Classification: 625ms)
+ LOG  🎉 [2026-02-17T20:14:33.309Z] Backend request completed successfully! (ID: proc_1771359273298_hjjjs)
+ LOG  🎉 [2026-02-17T20:14:33.309Z] Result received: safe_content (0.98)
+ LOG  📊 [2026-02-17T20:14:33.309Z] Complete analysis (1516ms) (ID: proc_1771359273298_hjjjs):
+ LOG     🏷️ Category: safe_content
+ LOG     📊 Confidence: 98.0%
+ LOG     🚨 Harmful: NO
+ LOG     🎯 Action: continue
+ LOG     ⏱️ ML Kit: 699ms | Backend: 793ms | Total: 1516ms
+ LOG     🚀 Advantage: 1.1x faster than Google Vision API
+ LOG  ✅ [2026-02-17T20:14:33.309Z] Content safe - continuing (ID: proc_1771359273298_hjjjs)
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 [2026-02-17T20:14:34.910Z] Processing complete - immediately triggering next capture (ID: proc_1771359273298_hjjjs)
+ LOG  🔄 [2026-02-17T20:14:34.910Z] → captureLoopRef.current: true
+ LOG  🔄 [2026-02-17T20:14:34.910Z] → This should continue the monitoring loop
+ LOG  🎯 [2026-02-17T20:14:34.910Z] → Triggering next capture NOW (ID: proc_1771359273298_hjjjs)
+ LOG  🎯 [2026-02-17T20:14:34.912Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:34.912Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:34.912Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:39.356Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:39.356Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:34.912Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:39.356Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:39.363Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:39.363Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:39.363Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:39.363Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:39.363Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:39.363Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:39.370Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:39.370Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:39.370Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:39.565Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:39.565Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:39.370Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:39.565Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:39.575Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:39.575Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:39.575Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:39.575Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:39.575Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:39.575Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:39.580Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:39.580Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:39.580Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:39.737Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:39.737Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:39.580Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:39.737Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:39.740Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:39.740Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:39.740Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:39.740Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:39.740Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:39.740Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:39.743Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:39.743Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:39.743Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:39.909Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:39.909Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:39.743Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:39.909Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:39.913Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:39.913Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:39.913Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:39.913Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:39.913Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:39.913Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:39.918Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:39.918Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:39.918Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:40.062Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:40.062Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:39.918Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:40.062Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:40.068Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:40.068Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:40.068Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:40.068Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:40.068Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:40.068Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:40.071Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:40.071Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:40.071Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:40.239Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:40.239Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:40.071Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:40.239Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:40.242Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:40.242Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:40.242Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:40.242Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:40.242Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:40.242Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:40.245Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:40.245Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:40.245Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:40.405Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:40.405Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:40.245Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:40.405Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:40.408Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:40.408Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:40.408Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:40.408Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:40.408Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:40.408Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:40.412Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:40.412Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:40.412Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:40.555Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:40.555Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:40.412Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:40.555Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:40.559Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:40.559Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:40.559Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:40.559Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:40.559Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:40.559Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:40.563Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:40.563Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:40.563Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:40.704Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:40.704Z] captureLoopRef.current: true
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:40.704Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:40.824Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:40.824Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:40.824Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:40.824Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:40.824Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:40.824Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:40.826Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:40.826Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:40.826Z] → isProcessingRef.current: false
+ LOG  ✅ [2026-02-17T20:14:40.563Z] captureNextFrame completed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:40.963Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:40.963Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:40.826Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:40.963Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:40.975Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:40.975Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:40.975Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:40.975Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:40.975Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:40.975Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:40.977Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:40.977Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:40.977Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:41.138Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:41.138Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:40.977Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:41.138Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:41.141Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:41.141Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:41.141Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:41.141Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:41.141Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:41.141Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:41.145Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:41.145Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:41.145Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🧹 Cleared recent capture IDs for deduplication
+ LOG  📸 [2026-02-17T20:14:41.307Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:41.307Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:41.145Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:41.307Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:41.310Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:41.310Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:41.310Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:41.310Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:41.310Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:41.310Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:41.318Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:41.318Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:41.318Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:41.473Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:41.473Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:41.318Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:41.473Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:41.494Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:41.494Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:41.494Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:41.494Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:41.494Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:41.494Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:41.501Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:41.501Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:41.501Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:41.629Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:41.629Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:41.501Z] captureNextFrame completed
+ LOG  📱 [2026-02-17T20:14:41.629Z] App at capture time: com.miui.home (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:41.633Z] Skipping capture - not in monitored app (com.miui.home)
+ LOG  🚫 [2026-02-17T20:14:41.633Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:41.633Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:41.633Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:41.633Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:41.633Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:41.635Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:41.635Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:41.635Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:42.439Z] App changed: {"appName": "com.allot", "isMonitored": false, "packageName": "com.allot", "timestamp": 1771359282439}
+ LOG  📱 [2026-02-17T20:14:42.439Z] Left monitored app, now in: com.allot
+ LOG     → Screen capture should be PAUSED
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📸 [2026-02-17T20:14:42.543Z] Screen captured: 1080x2400
+ LOG  🔍 [2026-02-17T20:14:42.543Z] captureLoopRef.current: true
+ LOG  ✅ [2026-02-17T20:14:41.635Z] captureNextFrame completed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  📱 [2026-02-17T20:14:42.543Z] App at capture time: com.allot (monitored: false)
+ LOG  ⏭️ [2026-02-17T20:14:42.676Z] Skipping capture - not in monitored app (com.allot)
+ LOG  🚫 [2026-02-17T20:14:42.676Z] CRITICAL: This capture should NOT reach processCapture
+ LOG  🔄 [2026-02-17T20:14:42.676Z] → IMMEDIATELY continuing capture loop after skip
+ LOG  🔄 [2026-02-17T20:14:42.676Z] → Processing state: false
+ LOG  🔄 [2026-02-17T20:14:42.676Z] → About to call triggerNextCapture()
+ LOG  🎯 [2026-02-17T20:14:42.676Z] → CALLING triggerNextCapture() now
+ LOG  🎯 [2026-02-17T20:14:42.679Z] Calling captureNextFrame...
+ LOG  🎯 [2026-02-17T20:14:42.679Z] → captureLoopRef.current: true
+ LOG  🎯 [2026-02-17T20:14:42.679Z] → isProcessingRef.current: false
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🛑 Stopping sequential screen capture...
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🔄 Synchronizing captureLoop state: false -> captureLoopRef: false
+ ERROR  ❌ [2026-02-17T20:14:42.679Z] Error triggering next capture: [Error: Error processing captured image: Image is already closed] Error: Error processing captured image: Image is already closed
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🎬 Starting sequential screen capture...
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ ERROR  ❌ Error starting capture: [Error: Security error - check permissions: Media projections require a foreground service of type ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION] Error: Security error - check permissions: Media projections require a foreground service of type ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+ LOG  🔥 SCREEN CAPTURE COMPONENT LOADED - NEW VERSION WITH DEBUG
+ LOG  🧹 Cleared recent capture IDs for deduplication
+ LOG  🧹 Cleared recent capture IDs for deduplication

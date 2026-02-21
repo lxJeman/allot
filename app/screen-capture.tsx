@@ -670,21 +670,9 @@ export default function ScreenCaptureScreen() {
       const extractedText = extractionResult.extractedText || '';
       console.log(`📝 [${timestamp}] ML Kit extraction complete (${mlKitTime}ms) (ID: ${processingId}): "${extractedText.substring(0, 100)}${extractedText.length > 100 ? '...' : ''}"`);
 
-      // Update stats
-      setStats(prev => ({
-        ...prev,
-        totalTextExtractions: prev.totalTextExtractions + 1,
-        averageMLKitTime: (prev.averageMLKitTime * prev.totalTextExtractions + mlKitTime) / (prev.totalTextExtractions + 1),
-        lastExtractedText: extractedText,
-      }));
-
       // Step 2: Send extracted text to backend for LLM classification (only if we have meaningful text)
       if (extractedText.trim().length > 3) {
         console.log(`🧠 [${timestamp}] Sending extracted text to backend for classification... (ID: ${processingId})`);
-        console.log(`🧠 [${timestamp}] THIS BACKEND CALL SHOULD ONLY HAPPEN FOR MONITORED APPS`);
-        console.log(`🧠 [${timestamp}] If you see this for non-monitored apps, there's a critical bug!`);
-        console.log(`🌐 [${timestamp}] About to call aiDetectionService.detectHarmfulContent`);
-        console.log(`📝 [${timestamp}] Text length: ${extractedText.length} chars`);
 
         const backendStartTime = Date.now();
         
@@ -702,11 +690,6 @@ export default function ScreenCaptureScreen() {
             captureData.height
           );
           
-          // CRITICAL: Always process the result, even if timeout occurred
-          // The finally block will handle proper cleanup and loop continuation
-          console.log(`🎉 [${timestamp}] Backend request completed successfully! (ID: ${processingId})`);
-          console.log(`🎉 [${timestamp}] Result received: ${result.category} (${result.confidence})`);
-          
           const backendTime = Date.now() - backendStartTime;
           const totalTime = Date.now() - startTime;
 
@@ -716,23 +699,21 @@ export default function ScreenCaptureScreen() {
           console.log(`   🚨 Harmful: ${result.harmful ? 'YES' : 'NO'}`);
           console.log(`   🎯 Action: ${result.action}`);
           console.log(`   ⏱️ ML Kit: ${mlKitTime}ms | Backend: ${backendTime}ms | Total: ${totalTime}ms`);
-          console.log(`   🚀 Advantage: ${Math.round((800 / mlKitTime) * 10) / 10}x faster than Google Vision API`);
 
-          // Update stats
+          // BATCH ALL STATS UPDATES TOGETHER - Single re-render instead of 2
           setStats(prev => ({
             ...prev,
+            totalTextExtractions: prev.totalTextExtractions + 1,
             successfulClassifications: prev.successfulClassifications + 1,
+            averageMLKitTime: (prev.averageMLKitTime * prev.totalTextExtractions + mlKitTime) / (prev.totalTextExtractions + 1),
             averageBackendTime: (prev.averageBackendTime * prev.successfulClassifications + backendTime) / (prev.successfulClassifications + 1),
+            lastExtractedText: extractedText,
             lastClassification: result.category,
           }));
 
           // Handle the analysis result - CRITICAL FIX: Show popup for ANY harmful content
           if (result.harmful) {
             console.log(`⚠️ [${timestamp}] 🚫 HARMFUL CONTENT DETECTED (ID: ${processingId})`);
-            console.log(`   📝 Text: "${extractedText}"`);
-            console.log(`   🏷️ Category: ${result.category}`);
-            console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
-            console.log(`   🎯 Action: ${result.action}`);
             
             // CRITICAL: Show popup immediately - don't wait
             console.log(`🚨 [${timestamp}] SHOWING HARMFUL CONTENT POPUP NOW (ID: ${processingId})`);
@@ -797,6 +778,7 @@ export default function ScreenCaptureScreen() {
         console.warn('Failed to notify processing ended:', error);
       }
       
+      // Batch ALL state updates together to prevent multiple re-renders
       setIsProcessing(false);
       isProcessingRef.current = false;
 
@@ -804,22 +786,12 @@ export default function ScreenCaptureScreen() {
       if (captureLoopRef.current) {
         const nextTimestamp = new Date().toISOString();
         console.log(`🔄 [${nextTimestamp}] Processing complete - immediately triggering next capture (ID: ${processingId})`);
-        console.log(`🔄 [${nextTimestamp}] → captureLoopRef.current: ${captureLoopRef.current}`);
-        console.log(`🔄 [${nextTimestamp}] → This should continue the monitoring loop`);
         
-        // ZERO DELAYS: Immediate next capture
-        console.log(`🎯 [${nextTimestamp}] → Triggering next capture NOW (ID: ${processingId})`);
-        
-        // Immediate trigger without setTimeout
+        // Immediate trigger without any delays or logging
         if (captureLoopRef.current && !isProcessingRef.current) {
-          triggerNextCapture();
-        } else if (isProcessingRef.current) {
-          console.log(`🚫 [${nextTimestamp}] → Not triggering - already processing another capture`);
+          // Use setImmediate or queueMicrotask to avoid blocking
+          queueMicrotask(() => triggerNextCapture());
         }
-      } else {
-        console.log(`🛑 [${timestamp}] Capture loop stopped, not triggering next capture (ID: ${processingId})`);
-        console.log(`🛑 [${timestamp}] → captureLoopRef.current: ${captureLoopRef.current}`);
-        console.log(`🛑 [${timestamp}] → User manually stopped capture`);
       }
     }
   }, [triggerNextCapture, smartCaptureEnabled, stopCapture]);
@@ -859,10 +831,11 @@ export default function ScreenCaptureScreen() {
     try {
       console.log('🚀 Manual send to backend using NATIVE HTTP CLIENT...');
       
-      // Import native HTTP client
+      // Import native HTTP client and config
       const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+      const { Config } = await import('../constants/config');
       
-      const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+      const response = await nativeHttpClient.post(`${Config.BACKEND_URL}/analyze`, {
         body: {
           image: lastCapture.base64,
           width: lastCapture.width,
@@ -1342,10 +1315,11 @@ Stats:
             try {
               console.log('🌐 Testing backend connectivity using NATIVE HTTP CLIENT...');
               
-              // Import native HTTP client
+              // Import native HTTP client and config
               const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+              const { Config } = await import('../constants/config');
               
-              const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+              const response = await nativeHttpClient.post(`${Config.BACKEND_URL}/analyze`, {
                 body: {
                   extracted_text: 'test message from native HTTP client',
                   width: 1080,
@@ -1379,13 +1353,14 @@ Stats:
             try {
               console.log('🚀 Testing Native HTTP Bridge...');
               
-              // Import the native HTTP client
+              // Import the native HTTP client and config
               const { nativeHttpClient } = await import('../services/nativeHttpBridge');
+              const { Config } = await import('../constants/config');
               
               const startTime = Date.now();
               
               // Test the same backend endpoint
-              const response = await nativeHttpClient.post('http://192.168.100.55:3000/analyze', {
+              const response = await nativeHttpClient.post(`${Config.BACKEND_URL}/analyze`, {
                 body: {
                   extracted_text: 'Test message from native HTTP client',
                   width: 720,
