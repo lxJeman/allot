@@ -15,7 +15,14 @@ import { useColorScheme } from '../hooks/use-color-scheme';
 import { aiDetectionService } from '../services/aiDetectionService';
 import { BitmapMemoryMonitor } from '../components/BitmapMemoryMonitor';
 
-const { ScreenCaptureModule, ScreenPermissionModule, SmartDetectionModule, AppDetectionModule } = NativeModules;
+const { 
+  ScreenCaptureModule, 
+  ScreenPermissionModule, 
+  SmartDetectionModule, 
+  AppDetectionModule,
+  ContentBlockingModule,
+  ForegroundServiceModule 
+} = NativeModules;
 
 interface CaptureStats {
   totalCaptures: number;
@@ -445,6 +452,19 @@ export default function ScreenCaptureScreen() {
     try {
       console.log('🎬 Starting sequential screen capture...');
       
+      // ✅ MVP FIX: Start foreground service to keep process alive
+      console.log('🚀 Starting foreground service...');
+      try {
+        await ForegroundServiceModule.startForegroundService(
+          'Allot Monitoring Active',
+          'Scanning for harmful content in social media apps'
+        );
+        console.log('✅ Foreground service started - process will stay alive');
+      } catch (error) {
+        console.warn('⚠️ Could not start foreground service:', error);
+        // Continue anyway - not critical for dev/testing
+      }
+      
       // Start the native capture system first
       await ScreenCaptureModule.startScreenCapture();
       setStats(prev => ({ ...prev, isCapturing: true }));
@@ -482,6 +502,15 @@ export default function ScreenCaptureScreen() {
       setStats(prev => ({ ...prev, isCapturing: false }));
       setIsProcessing(false);
       isProcessingRef.current = false;
+
+      // ✅ MVP FIX: Stop foreground service
+      console.log('🛑 Stopping foreground service...');
+      try {
+        await ForegroundServiceModule.stopForegroundService();
+        console.log('✅ Foreground service stopped');
+      } catch (error) {
+        console.warn('⚠️ Could not stop foreground service:', error);
+      }
 
       Alert.alert('Success', 'Sequential screen capture stopped');
     } catch (error) {
@@ -714,30 +743,23 @@ export default function ScreenCaptureScreen() {
           // Handle the analysis result - CRITICAL FIX: Show popup for ANY harmful content
           if (result.harmful) {
             console.log(`⚠️ [${timestamp}] 🚫 HARMFUL CONTENT DETECTED (ID: ${processingId})`);
+            console.log(`   📝 Text: "${extractedText}"`);
+            console.log(`   🏷️ Category: ${result.category}`);
+            console.log(`   📊 Confidence: ${(result.confidence * 100).toFixed(1)}%`);
+            console.log(`   🎯 Action: ${result.action}`);
             
-            // CRITICAL: Show popup immediately - don't wait
+            // ✅ MVP FIX: Use ContentBlockingModule instead of Alert.alert()
+            // This works in BOTH dev and production, even when app is backgrounded
             console.log(`🚨 [${timestamp}] SHOWING HARMFUL CONTENT POPUP NOW (ID: ${processingId})`);
-            Alert.alert(
-              '⚠️ Harmful Content Detected',
-              `Category: ${result.category}\nConfidence: ${(result.confidence * 100).toFixed(1)}%\n\nText: "${extractedText.substring(0, 100)}${extractedText.length > 100 ? '...' : ''}"\n\nRecommendation: ${result.recommendation}`,
-              [
-                { 
-                  text: 'Continue Monitoring', 
-                  style: 'cancel',
-                  onPress: () => {
-                    console.log(`✅ [${timestamp}] User chose to continue monitoring (ID: ${processingId})`);
-                  }
-                },
-                { 
-                  text: 'Stop Capture', 
-                  onPress: () => {
-                    console.log(`🛑 [${timestamp}] User chose to stop capture (ID: ${processingId})`);
-                    stopCapture();
-                  }
-                }
-              ]
-            );
-            console.log(`✅ [${timestamp}] POPUP DISPLAYED SUCCESSFULLY (ID: ${processingId})`);
+            try {
+              await ContentBlockingModule.showContentWarning(
+                `⚠️ ${result.category.toUpperCase()} CONTENT DETECTED\n\nConfidence: ${(result.confidence * 100).toFixed(1)}%\n\n${result.recommendation}`,
+                3 // Auto-hide after 3 seconds
+              );
+              console.log(`✅ [${timestamp}] POPUP DISPLAYED SUCCESSFULLY (ID: ${processingId})`);
+            } catch (error) {
+              console.error(`❌ [${timestamp}] Failed to show overlay (ID: ${processingId}):`, error);
+            }
             
             // TODO: Implement scroll/blur actions based on result.action
             if (result.action === 'scroll') {

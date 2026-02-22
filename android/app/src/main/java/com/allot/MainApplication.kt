@@ -32,6 +32,7 @@ class MainApplication : Application(), ReactApplication {
               add(ScreenCapturePackage())
               add(LocalTextExtractionPackage())
               add(SmartDetectionPackage())
+              add(ForegroundServicePackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"

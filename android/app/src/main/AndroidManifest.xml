@@ -65,5 +65,12 @@
       android:enabled="true"
       android:exported="false"
       android:foregroundServiceType="mediaProjection" />
+      
+    <!-- Monitoring Foreground Service - Keeps app alive during monitoring -->
+    <service
+      android:name=".AllotMonitoringService"
+      android:enabled="true"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
   </application>
 </manifest>
