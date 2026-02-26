@@ -40,7 +40,6 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         private var captureHandler: Handler? = null
         private var captureRunnable: Runnable? = null
         private var captureInterval = 5000L // 5 seconds = 0.2 FPS (much slower for sequential processing)
-        private var shouldProcessNextFrame = false // Control frame processing
         private var lastCapturedFrame: ScreenCaptureService.CapturedFrame? = null
         private var lastCapturedBitmap: android.graphics.Bitmap? = null // HOT PATH: Direct bitmap storage
         private var pendingCapturePromise: Promise? = null // Store pending promise
@@ -422,22 +421,9 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             // Store the promise to resolve when frame is captured
             pendingCapturePromise = promise
 
-            // Trigger frame generation by forcing a display refresh
-            virtualDisplay?.let { display ->
-                try {
-                    val windowManager = reactApplicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                    val displayMetrics = DisplayMetrics()
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        windowManager.defaultDisplay.getRealMetrics(displayMetrics)
-                    } else {
-                        @Suppress("DEPRECATION") windowManager.defaultDisplay.getMetrics(displayMetrics)
-                    }
-                    display.resize(displayMetrics.widthPixels, displayMetrics.heightPixels, displayMetrics.densityDpi)
-                    Log.d(TAG, "🔄 Triggered frame generation")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to trigger frame generation: ${e.message}")
-                }
-            }
+            // RESUME VirtualDisplay to generate ONE frame
+            Log.d(TAG, "▶️  Resuming VirtualDisplay to capture frame...")
+            resumeVirtualDisplay()
 
             // Set a timeout to prevent hanging forever
             Handler(Looper.getMainLooper())
@@ -621,22 +607,18 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
             Log.d(TAG, "✅ VirtualDisplay created successfully")
 
-            // No automatic refresh - only capture on demand
-
+            // Set up listener - will only fire when VirtualDisplay surface is active
             imageReader?.setOnImageAvailableListener(
                     { reader ->
                         var image: Image? = null
                         try {
                             image = reader.acquireLatestImage()
                             if (image != null) {
-                                // Only process frames when explicitly requested or when capturing is active
-                                if (isCapturing && (shouldProcessNextFrame || pendingCapturePromise != null)) {
-                                    Log.d(TAG, "🎯 Processing requested frame")
-                                    shouldProcessNextFrame = false // Reset flag
-                                    processImage(image)
-                                } else {
-                                    Log.v(TAG, "🚫 Discarding frame - not requested")
-                                }
+                                Log.d(TAG, "✅ PROCESSING FRAME")
+                                processImage(image)
+                                
+                                // IMMEDIATELY pause VirtualDisplay after capturing one frame
+                                pauseVirtualDisplay()
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Error in image listener: ${e.message}", e)
@@ -647,6 +629,9 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
                     },
                     backgroundHandler
             )
+            
+            // Start with VirtualDisplay PAUSED (no continuous frame generation)
+            pauseVirtualDisplay()
 
             Log.d(TAG, "✅ Image capture setup completed")
         } catch (e: Exception) {
@@ -815,26 +800,9 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         // Set callback to trigger captures from service
         service.onTriggerCapture = {
             try {
-                // Request next frame and trigger a display refresh to generate new frame
-                shouldProcessNextFrame = true
-                Log.v(TAG, "🎯 Frame requested by service")
-                
-                // Force a display refresh to generate a new frame
-                virtualDisplay?.let { display ->
-                    try {
-                        // Trigger frame generation by forcing a display update
-                        val windowManager = reactApplicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                        val displayMetrics = DisplayMetrics()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            windowManager.defaultDisplay.getRealMetrics(displayMetrics)
-                        } else {
-                            @Suppress("DEPRECATION") windowManager.defaultDisplay.getMetrics(displayMetrics)
-                        }
-                        display.resize(displayMetrics.widthPixels, displayMetrics.heightPixels, displayMetrics.densityDpi)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to trigger frame generation: ${e.message}")
-                    }
-                }
+                // RESUME VirtualDisplay to generate ONE frame
+                Log.v(TAG, "🎯 Frame requested by service - resuming VirtualDisplay")
+                resumeVirtualDisplay()
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error triggering capture: ${e.message}")
             }
@@ -867,6 +835,32 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         ScreenCaptureService.getInstance()?.stopCaptureLoop()
         disconnectServiceCallbacks()
         Log.d(TAG, "🛑 Capture loop stopped")
+    }
+
+    /**
+     * Pause VirtualDisplay to stop continuous frame generation
+     * This prevents the 60fps spam by setting surface to null
+     */
+    private fun pauseVirtualDisplay() {
+        try {
+            virtualDisplay?.setSurface(null)
+            Log.v(TAG, "⏸️  VirtualDisplay paused (surface = null)")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error pausing VirtualDisplay: ${e.message}")
+        }
+    }
+
+    /**
+     * Resume VirtualDisplay to capture ONE frame
+     * This triggers frame generation by restoring the ImageReader surface
+     */
+    private fun resumeVirtualDisplay() {
+        try {
+            virtualDisplay?.setSurface(imageReader?.surface)
+            Log.v(TAG, "▶️  VirtualDisplay resumed (surface restored)")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error resuming VirtualDisplay: ${e.message}")
+        }
     }
 
     private fun cleanupCapture() {

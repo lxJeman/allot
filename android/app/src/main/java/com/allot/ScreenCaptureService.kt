@@ -39,7 +39,8 @@ class ScreenCaptureService : Service() {
     private val isProcessingFrame = AtomicBoolean(false)
 
     // Backend configuration - KEEP GROQ BACKEND!
-    private var backendUrl = "http://192.168.100.55:3000/analyze"
+    // Use HTTPS ngrok URL for production, or set via setBackendUrl() for local dev
+    private var backendUrl = "https://obdulia-fanciless-uncorruptedly.ngrok-free.dev/analyze"
     private var enableNativeBackend = true
     
     // Local text extraction integration (REPLACES Google Vision API)
