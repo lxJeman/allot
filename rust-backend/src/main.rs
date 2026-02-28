@@ -193,9 +193,12 @@ struct Config {
 impl Config {
     fn from_env() -> Self {
         Self {
-            google_vision_api_key: "AIzaSyB_qQtOrwHrBCfq9vayfldfJ0QdDQ0D7Vo".to_string(),
-            groq_api_key: "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".to_string(),
-            groq_model: "openai/gpt-oss-20b".to_string(),
+            google_vision_api_key: std::env::var("GOOGLE_VISION_API_KEY")
+                .expect("GOOGLE_VISION_API_KEY must be set"),
+            groq_api_key: std::env::var("GROQ_API_KEY")
+                .expect("GROQ_API_KEY must be set"),
+            groq_model: std::env::var("GROQ_MODEL")
+                .unwrap_or_else(|_| "openai/gpt-oss-20b".to_string()),
         }
     }
 }

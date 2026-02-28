@@ -377,37 +377,9 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
 
             Log.d(TAG, "🎯 Requesting next frame capture...")
 
-            // Check if we have a recent frame (within 200ms for faster response)
-            // BUT only if we're not in a monitoring scenario where content changes rapidly
-            val frame = lastCapturedFrame
-            val currentTime = System.currentTimeMillis()
-
-            // Disable frame caching during active monitoring to ensure fresh captures
-            // This prevents returning stale frames when content is changing (scrolling, etc.)
-            val shouldUseCache = frame != null && 
-                                (currentTime - frame.timestamp) < 200 &&
-                                !isActivelyMonitoring()
-
-            if (shouldUseCache) {
-                // We have a very recent frame, return it immediately
-                Log.d(TAG, "⚡ Returning very recent frame: ${frame.width}x${frame.height}")
-
-                val result =
-                        Arguments.createMap().apply {
-                            putString("base64", frame.base64)
-                            putInt("width", frame.width)
-                            putInt("height", frame.height)
-                            putDouble("timestamp", frame.timestamp.toDouble())
-                        }
-
-                promise.resolve(result)
-                return
-            } else if (frame != null && (currentTime - frame.timestamp) < 200) {
-                Log.d(TAG, "🔄 Fresh frame needed - actively monitoring, forcing new capture")
-            }
-
-            // No recent frame, wait for a new one (should be very fast now)
-            Log.d(TAG, "⏳ Waiting for fresh frame...")
+            // ALWAYS force a fresh capture - don't use cached frames
+            // This ensures we capture the current screen content, not stale data
+            Log.d(TAG, "⏳ Forcing fresh frame capture...")
 
             // Check if we already have a pending promise
             if (pendingCapturePromise != null) {
@@ -820,7 +792,39 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
         // This allows LocalTextExtractionModule to control the backend mode
         Log.d(TAG, "🔧 Native backend setting preserved (not overridden)")
 
+        // CRITICAL FIX: Hook into accessibility service to invalidate bitmap cache on app/scroll changes
+        connectAccessibilityCallbacks()
+
         Log.d(TAG, "✅ Service callbacks connected")
+    }
+
+    private fun connectAccessibilityCallbacks() {
+        try {
+            val accessibilityService = AllotAccessibilityService.getInstance()
+            if (accessibilityService != null) {
+                // Invalidate bitmap cache when app changes
+                accessibilityService.onAppChanged = { packageName, isMonitored ->
+                    Log.w(TAG, "🔄 APP CHANGED: $packageName (monitored: $isMonitored)")
+                    Log.w(TAG, "   → INVALIDATING CACHED BITMAP")
+                    recycleLastBitmap()
+                    lastCapturedFrame = null
+                }
+
+                // Invalidate bitmap cache when user scrolls
+                accessibilityService.onScrollDetected = {
+                    Log.w(TAG, "📜 SCROLL DETECTED")
+                    Log.w(TAG, "   → INVALIDATING CACHED BITMAP")
+                    recycleLastBitmap()
+                    lastCapturedFrame = null
+                }
+
+                Log.d(TAG, "✅ Accessibility callbacks connected - bitmap cache will be invalidated on app/scroll changes")
+            } else {
+                Log.w(TAG, "⚠️ Accessibility service not available - bitmap cache invalidation disabled")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error connecting accessibility callbacks: ${e.message}", e)
+        }
     }
 
     private fun disconnectServiceCallbacks() {
@@ -828,6 +832,13 @@ class ScreenCaptureModule(reactContext: ReactApplicationContext) :
             service.onTriggerCapture = null
             service.onCaptureCallback = null
             Log.d(TAG, "🔌 Service callbacks disconnected")
+        }
+        
+        // Disconnect accessibility callbacks
+        AllotAccessibilityService.getInstance()?.let { accessibilityService ->
+            accessibilityService.onAppChanged = null
+            accessibilityService.onScrollDetected = null
+            Log.d(TAG, "🔌 Accessibility callbacks disconnected")
         }
     }
 
